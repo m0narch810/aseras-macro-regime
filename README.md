@@ -1,4 +1,4 @@
-# Aseras Macro Regime Engine
+# VANTA
 
 A systematic weekly bias engine for NQ/ES equity index futures. 
 Combines Federal Reserve balance sheet data, macroeconomic 
