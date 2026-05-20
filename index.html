@@ -11,22 +11,22 @@
 
 /* ── TOKENS ──────────────────────────────────────── */
 :root {
-  --bg:          #050509;
-  --bg-grid:     rgba(34,211,238,0.055);
-  --surface:     rgba(34,211,238,0.035);
-  --surface-hi:  rgba(34,211,238,0.065);
+  --bg:          #060608;
+  --bg-grid:     rgba(255,255,255,0.033);
+  --surface:     rgba(255,255,255,0.032);
+  --surface-hi:  rgba(255,255,255,0.058);
 
-  --accent:      #22d3ee;
-  --accent-dim:  rgba(34,211,238,0.12);
-  --accent-glow: rgba(34,211,238,0.22);
-  --accent-sub:  rgba(34,211,238,0.6);
+  --accent:      #c8d0dc;
+  --accent-dim:  rgba(200,208,220,0.09);
+  --accent-glow: rgba(200,208,220,0.14);
+  --accent-sub:  rgba(200,208,220,0.55);
 
-  --border:      rgba(34,211,238,0.13);
-  --border-hi:   rgba(34,211,238,0.28);
+  --border:      rgba(255,255,255,0.088);
+  --border-hi:   rgba(255,255,255,0.18);
 
-  --text:  #eef2f7;
-  --muted: rgba(160,180,200,0.62);
-  --ghost: rgba(100,130,155,0.5);
+  --text:  #f0f2f5;
+  --muted: rgba(158,168,184,0.68);
+  --ghost: rgba(100,110,126,0.56);
 
   --bull:      #34d399;
   --bull-dim:  rgba(52,211,153,0.08);
@@ -38,13 +38,11 @@
   --bear-b:    rgba(248,113,113,0.22);
   --bear-glow: rgba(248,113,113,0.28);
 
-  --mixed:      #fbbf24;
-  --mixed-dim:  rgba(251,191,36,0.08);
-  --mixed-b:    rgba(251,191,36,0.18);
-  --mixed-glow: rgba(251,191,36,0.24);
-
-  --blue:      #818cf8;
-  --blue-glow: rgba(129,140,248,0.25);
+  /* mixed → red as requested */
+  --mixed:      #ef4444;
+  --mixed-dim:  rgba(239,68,68,0.08);
+  --mixed-b:    rgba(239,68,68,0.2);
+  --mixed-glow: rgba(239,68,68,0.22);
 }
 
 /* ── RESET ───────────────────────────────────────── */
@@ -66,30 +64,22 @@ body {
 
 /* ── SCAN LINE ───────────────────────────────────── */
 .scan-line {
-  position: fixed; left: 0; width: 100%; height: 2px;
+  position: fixed; left: 0; width: 100%; height: 1px;
   background: linear-gradient(90deg,
     transparent 0%,
-    rgba(34,211,238,0.05) 15%,
-    rgba(34,211,238,0.18) 50%,
-    rgba(34,211,238,0.05) 85%,
+    rgba(255,255,255,0.03) 15%,
+    rgba(255,255,255,0.1) 50%,
+    rgba(255,255,255,0.03) 85%,
     transparent 100%
   );
   pointer-events: none; z-index: 0;
-  animation: scan 14s linear infinite;
+  animation: scan 16s linear infinite;
 }
 @keyframes scan {
-  0%   { top: -4px; opacity: 0; }
-  4%   { opacity: 1; }
-  96%  { opacity: 1; }
+  0%   { top: -2px; opacity: 0; }
+  5%   { opacity: 1; }
+  95%  { opacity: 1; }
   100% { top: 100vh; opacity: 0; }
-}
-
-/* ── TOP HALO ────────────────────────────────────── */
-.halo {
-  position: fixed; top: 0; left: 0; right: 0; height: 380px;
-  background: radial-gradient(ellipse 80% 240px at 50% -40px,
-    rgba(34,211,238,0.07) 0%, transparent 100%);
-  pointer-events: none; z-index: 0;
 }
 
 /* ── PAGE WRAPPER ────────────────────────────────── */
@@ -100,7 +90,7 @@ header {
   display: flex; justify-content: space-between; align-items: center;
   padding: 13px 32px;
   border-bottom: 1px solid var(--border);
-  background: rgba(5,5,9,0.88);
+  background: rgba(6,6,8,0.9);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   position: sticky; top: 0; z-index: 100;
@@ -114,8 +104,8 @@ header {
   user-select: none;
 }
 .brand .alph {
-  color: var(--accent);
-  text-shadow: 0 0 20px var(--accent-glow);
+  color: #ffffff;
+  text-shadow: 0 0 16px rgba(255,255,255,0.35);
 }
 
 .header-right { display: flex; align-items: center; gap: 22px; }
@@ -162,7 +152,7 @@ main {
 }
 .sec-lbl::after {
   content: ''; flex: 1; height: 1px;
-  background: linear-gradient(90deg, rgba(34,211,238,0.15), transparent);
+  background: linear-gradient(90deg, rgba(255,255,255,0.1), transparent);
 }
 
 /* ── CARD ────────────────────────────────────────── */
@@ -181,12 +171,12 @@ main {
   content: '';
   position: absolute; left: 0; top: 0; bottom: 0;
   width: 2px;
-  background: var(--accent);
+  background: rgba(255,255,255,0.5);
   opacity: 0;
   transition: opacity 0.22s;
 }
 .card:hover { background: var(--surface-hi); border-color: var(--border-hi); }
-.card:hover::after { opacity: 0.45; }
+.card:hover::after { opacity: 0.35; }
 
 .card-title {
   font-family: 'Syne', sans-serif;
@@ -194,7 +184,7 @@ main {
   letter-spacing: 0.24em; text-transform: uppercase;
   color: var(--ghost);
   margin-bottom: 14px; padding-bottom: 10px;
-  border-bottom: 1px solid rgba(34,211,238,0.07);
+  border-bottom: 1px solid rgba(255,255,255,0.055);
 }
 
 /* ── GRIDS ───────────────────────────────────────── */
@@ -233,12 +223,12 @@ main {
   content: '';
   position: absolute; right: 20px; bottom: 16px;
   width: 16px; height: 16px;
-  border-right: 1px solid rgba(34,211,238,0.22);
-  border-bottom: 1px solid rgba(34,211,238,0.22);
+  border-right: 1px solid rgba(255,255,255,0.14);
+  border-bottom: 1px solid rgba(255,255,255,0.14);
 }
-#hero.bull  { border-color: rgba(52,211,153,0.24);  box-shadow: 0 0 60px rgba(52,211,153,0.06); }
-#hero.bear  { border-color: rgba(248,113,113,0.24); box-shadow: 0 0 60px rgba(248,113,113,0.06); }
-#hero.mixed { border-color: rgba(251,191,36,0.2);   box-shadow: 0 0 60px rgba(251,191,36,0.05); }
+#hero.bull  { border-color: rgba(52,211,153,0.24);  box-shadow: 0 0 60px rgba(52,211,153,0.05); }
+#hero.bear  { border-color: rgba(248,113,113,0.24); box-shadow: 0 0 60px rgba(248,113,113,0.05); }
+#hero.mixed { border-color: rgba(239,68,68,0.2);    box-shadow: 0 0 60px rgba(239,68,68,0.04); }
 
 .hero-eyebrow {
   font-family: 'Syne', sans-serif;
@@ -250,9 +240,9 @@ main {
   font-size: 54px; font-weight: 800;
   letter-spacing: 0.05em; line-height: 1;
 }
-#hero.bull  #hero-label { color: var(--bull);  text-shadow: 0 0 55px rgba(52,211,153,0.42); }
-#hero.bear  #hero-label { color: var(--bear);  text-shadow: 0 0 55px rgba(248,113,113,0.42); }
-#hero.mixed #hero-label { color: var(--mixed); text-shadow: 0 0 55px rgba(251,191,36,0.42); }
+#hero.bull  #hero-label { color: var(--bull);  text-shadow: 0 0 55px rgba(52,211,153,0.4); }
+#hero.bear  #hero-label { color: var(--bear);  text-shadow: 0 0 55px rgba(248,113,113,0.4); }
+#hero.mixed #hero-label { color: var(--mixed); text-shadow: 0 0 55px rgba(239,68,68,0.4); }
 
 #hero-sub { margin-top: 10px; color: var(--muted); font-size: 10.5px; letter-spacing: 0.04em; }
 
@@ -276,8 +266,8 @@ main {
 
 .rscore {
   font-size: 10px; color: var(--ghost);
-  background: rgba(34,211,238,0.06);
-  border: 1px solid rgba(34,211,238,0.14);
+  background: rgba(255,255,255,0.045);
+  border: 1px solid rgba(255,255,255,0.1);
   border-radius: 2px; padding: 2px 8px;
   display: inline-block; margin-bottom: 14px;
 }
@@ -294,7 +284,7 @@ main {
 }
 .fc.pos  { background: var(--bull-dim);  border-color: var(--bull-b);  color: var(--bull); }
 .fc.neg  { background: var(--bear-dim);  border-color: var(--bear-b);  color: var(--bear); }
-.fc.zero { background: rgba(34,211,238,0.03); border-color: rgba(34,211,238,0.09); color: var(--ghost); }
+.fc.zero { background: rgba(255,255,255,0.025); border-color: rgba(255,255,255,0.08); color: var(--ghost); }
 .fc.pos:hover  { box-shadow: 0 0 14px var(--bull-glow); }
 .fc.neg:hover  { box-shadow: 0 0 14px var(--bear-glow); }
 .fc .fn { font-size: 8.5px; opacity: 0.72; }
@@ -309,7 +299,7 @@ main {
 .dirb.bull { color: var(--bull); text-shadow: 0 0 24px rgba(52,211,153,0.44); }
 .dirb.bear { color: var(--bear); text-shadow: 0 0 24px rgba(248,113,113,0.44); }
 
-.pbar-w { height: 3px; background: rgba(255,255,255,0.05); border-radius: 1px; margin: 10px 0; }
+.pbar-w { height: 3px; background: rgba(255,255,255,0.06); border-radius: 1px; margin: 10px 0; }
 .pbar   { height: 3px; border-radius: 1px; }
 .pbar.bull { background: linear-gradient(90deg, rgba(52,211,153,.3), var(--bull)); box-shadow: 0 0 7px var(--bull-glow); }
 .pbar.bear { background: linear-gradient(90deg, rgba(248,113,113,.3), var(--bear)); box-shadow: 0 0 7px var(--bear-glow); }
@@ -329,15 +319,15 @@ main {
 /* ── COT BAR ─────────────────────────────────────── */
 .pb-w { height: 4px; background: rgba(255,255,255,0.05); border-radius: 1px; margin: 8px 0; position: relative; }
 .pb-f { height: 4px; border-radius: 1px; }
-.pb-m { position: absolute; top: -4px; width: 1px; height: 12px; background: rgba(34,211,238,0.3); }
+.pb-m { position: absolute; top: -4px; width: 1px; height: 12px; background: rgba(255,255,255,0.22); }
 
 /* ── KEY LEVELS ──────────────────────────────────── */
 .lvl-tbl { width: 100%; border-collapse: collapse; }
-.lvl-tbl td { padding: 5px 0; border-bottom: 1px solid rgba(34,211,238,0.05); }
+.lvl-tbl td { padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.044); }
 .lvl-tbl tr:last-child td { border-bottom: none; }
 .ln { font-size: 10px; color: var(--muted); }
 .lv { text-align: right; font-size: 13px; color: var(--accent-sub); }
-.lv.hi { color: var(--text) !important; font-weight: 500; text-shadow: 0 0 10px var(--accent-glow); }
+.lv.hi { color: var(--text) !important; font-weight: 500; text-shadow: 0 0 10px rgba(255,255,255,0.22); }
 
 /* ── ACCURACY STRIP ──────────────────────────────── */
 .acc {
@@ -352,27 +342,26 @@ main {
 .as { flex: 1; padding: 0 24px; }
 .as:first-child { padding-left: 0; }
 .as:last-child  { padding-right: 0; }
-.as + .as { border-left: 1px solid rgba(34,211,238,0.08); }
+.as + .as { border-left: 1px solid rgba(255,255,255,0.07); }
 .al { font-family: 'Syne', sans-serif; font-size: 7.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ghost); }
 .av { font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; margin: 4px 0 2px; }
 .as2 { font-size: 9.5px; color: var(--muted); }
 
 /* ── HISTORY ─────────────────────────────────────── */
-.hist-wrap { margin-top: 10px; }
 table.hist { width: 100%; border-collapse: collapse; font-size: 11px; }
 .hist th {
   text-align: left;
   font-family: 'Syne', sans-serif;
   font-size: 7.5px; letter-spacing: 0.18em; text-transform: uppercase;
   color: var(--ghost); padding: 10px 14px;
-  border-bottom: 1px solid rgba(34,211,238,0.1); font-weight: 600;
+  border-bottom: 1px solid rgba(255,255,255,0.08); font-weight: 600;
 }
 .hist td {
   padding: 7px 14px;
-  border-bottom: 1px solid rgba(34,211,238,0.04);
+  border-bottom: 1px solid rgba(255,255,255,0.035);
   transition: background 0.15s;
 }
-.hist tr:hover td { background: rgba(34,211,238,0.025); }
+.hist tr:hover td { background: rgba(255,255,255,0.022); }
 .hist tr:last-child td { border-bottom: none; }
 
 /* ── TAGS ────────────────────────────────────────── */
@@ -391,8 +380,8 @@ table.hist { width: 100%; border-collapse: collapse; font-size: 11px; }
 /* ── INTERPRETATION BOX ──────────────────────────── */
 .interp {
   margin-top: 10px; padding: 8px 10px;
-  background: rgba(34,211,238,0.04);
-  border: 1px solid rgba(34,211,238,0.1);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
   border-radius: 2px;
   font-size: 11px; color: var(--muted);
   font-style: italic;
@@ -404,9 +393,9 @@ footer {
   text-align: center; color: var(--ghost);
   font-size: 9.5px; letter-spacing: 0.08em;
   padding: 26px 24px;
-  border-top: 1px solid rgba(34,211,238,0.06); margin-top: 32px;
+  border-top: 1px solid rgba(255,255,255,0.05); margin-top: 32px;
 }
-footer .alph { color: var(--accent-sub); }
+footer .alph { color: rgba(255,255,255,0.55); }
 
 /* ── MISC ────────────────────────────────────────── */
 .loading {
@@ -418,15 +407,14 @@ footer .alph { color: var(--accent-sub); }
 
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: rgba(34,211,238,0.22); border-radius: 1px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(34,211,238,0.4); }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16); border-radius: 1px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.28); }
 
 </style>
 </head>
 <body>
 
 <div class="scan-line"></div>
-<div class="halo"></div>
 
 <div class="pw">
 
@@ -481,8 +469,6 @@ function dc(v) { return String(v).toUpperCase().includes("BULL") ? "bull" : "bea
 function sgn(v) { return (v >= 0 ? "+" : "") + v; }
 function fc(v)  { return v > 0 ? "pos" : v < 0 ? "neg" : "zero"; }
 function pct(v, d) { return (v * 100).toFixed(d === undefined ? 1 : d) + "%"; }
-
-// safe text node helper
 function txt(v) { return document.createTextNode(String(v)); }
 
 // ── DOM HELPERS ───────────────────────────────────
@@ -504,8 +490,7 @@ function el(tag, attrs) {
 function kv(key, val, valStyle) {
   const r = el("div", {className:"kv"});
   r.appendChild(el("span", {className:"kk"}, key));
-  const vs = el("span", valStyle ? {style: valStyle} : {}, val);
-  r.appendChild(vs);
+  r.appendChild(el("span", valStyle ? {style:valStyle} : {}, val));
   return r;
 }
 function tagEl(text, cls) { return el("span", {className:"tag " + cls}, text); }
@@ -516,10 +501,7 @@ function barEl(pct_val, cls) {
   w.appendChild(f);
   return w;
 }
-
-function clearEl(node) {
-  while (node.firstChild) node.removeChild(node.firstChild);
-}
+function clearEl(node) { while (node.firstChild) node.removeChild(node.firstChild); }
 
 let _ci = 0;
 function card(titleText) {
@@ -549,7 +531,6 @@ function render(d) {
   const meta = d.meta;
   const confluence = d.confluence;
 
-  // header timestamp
   document.getElementById("meta-ts").textContent =
     "Generated " + (meta.generated_at || "—");
 
@@ -580,11 +561,9 @@ function render(d) {
     "Score " + sgn(mr.score) + " / " + mr.max_score));
   macroCard.appendChild(rDiv);
   macroCard.appendChild(kv("Bullish inputs",
-    (mr.bullish_inputs || []).join(", ") || "—",
-    {color:"var(--bull)"}));
+    (mr.bullish_inputs || []).join(", ") || "—", {color:"var(--bull)"}));
   macroCard.appendChild(kv("Bearish inputs",
-    (mr.bearish_inputs || []).join(", ") || "—",
-    {color:"var(--bear)"}));
+    (mr.bearish_inputs || []).join(", ") || "—", {color:"var(--bear)"}));
   const fg = el("div", {className:"factor-grid"});
   const fs = mr.factor_scores || {};
   for (const k in fs) {
@@ -600,8 +579,7 @@ function render(d) {
 
   // Price Model
   const priceCard = card("Price Model");
-  priceCard.appendChild(el("div", {className:"dirb " + dc(pm.direction)},
-    String(pm.direction)));
+  priceCard.appendChild(el("div", {className:"dirb " + dc(pm.direction)}, String(pm.direction)));
   priceCard.appendChild(el("div", {style:{color:"var(--muted)",fontSize:"11px",marginBottom:"4px"}},
     "Probability: " + (pm.probability * 100).toFixed(1) + "%"));
   priceCard.appendChild(barEl(pm.probability * 100, dc(pm.direction)));
@@ -611,7 +589,7 @@ function render(d) {
 
   // Vol Forecast
   const volCard = card("Vol Forecast");
-  volCard.appendChild(el("div", {className:"dirb", style:{color:"var(--blue)"}},
+  volCard.appendChild(el("div", {className:"dirb", style:{color:"var(--accent)"}},
     vf.weekly_vol_pct.toFixed(1) + "%"));
   volCard.appendChild(el("div", {style:{color:"var(--muted)",fontSize:"11px",marginBottom:"8px"}},
     "Weekly realized vol estimate"));
@@ -620,8 +598,8 @@ function render(d) {
   const volBar = el("div", {className:"pbar-w"});
   const volFill = el("div", {className:"pbar"});
   volFill.style.width = Math.max(3, vf.percentile) + "%";
-  volFill.style.background = "linear-gradient(90deg,rgba(129,140,248,.3),var(--blue))";
-  volFill.style.boxShadow = "0 0 7px var(--blue-glow)";
+  volFill.style.background = "linear-gradient(90deg, rgba(200,208,220,0.2), var(--accent))";
+  volFill.style.boxShadow = "0 0 7px rgba(200,208,220,0.2)";
   volBar.appendChild(volFill);
   volCard.appendChild(volBar);
   row1.appendChild(volCard);
@@ -636,12 +614,11 @@ function render(d) {
   const pctile = cot.nq_lev_pctile;
   const pColor = pctile > 0.8 ? "var(--bull)" : pctile < 0.2 ? "var(--bear)" : "var(--text)";
   cotCard.appendChild(kv("NQ Lev Funds",
-    String(cot.lev_label) + " (" + (pctile * 100).toFixed(0) + "th)",
-    {color: pColor}));
+    String(cot.lev_label) + " (" + (pctile * 100).toFixed(0) + "th)", {color:pColor}));
   const pbw = el("div", {className:"pb-w"});
   const pbf = el("div", {className:"pb-f"});
   pbf.style.width = (pctile * 100) + "%";
-  pbf.style.background = pctile > 0.8 ? "var(--bull)" : pctile < 0.2 ? "var(--bear)" : "var(--blue)";
+  pbf.style.background = pctile > 0.8 ? "var(--bull)" : pctile < 0.2 ? "var(--bear)" : "var(--accent)";
   pbw.appendChild(pbf);
   const pm1 = el("div", {className:"pb-m"}); pm1.style.left = "20%";
   const pm2 = el("div", {className:"pb-m"}); pm2.style.left = "80%";
@@ -655,8 +632,7 @@ function render(d) {
   cotCard.appendChild(kv("ES Asset Mgr Net",
     (amn >= 0 ? "+" : "") + (amn * 100).toFixed(1) + "% OI",
     {color: amn >= 0 ? "var(--bull)" : "var(--bear)"}));
-  cotCard.appendChild(el("div", {className:"interp"},
-    String(cot.positioning_interpretation || "—")));
+  cotCard.appendChild(el("div", {className:"interp"}, String(cot.positioning_interpretation || "—")));
   row2.appendChild(cotCard);
 
   // VIX Term Structure
@@ -678,14 +654,14 @@ function render(d) {
   const lvlCard = card("Key Levels · NQ");
   const tbl = el("table", {className:"lvl-tbl"});
   const levels = [
-    ["4-Week High",      "4w_high",  true],
-    ["Prev Week High",   "pw_high",  false],
-    ["Prev Week Close",  "pw_close", true],
-    ["Prev Week Mid",    "pw_mid",   false],
-    ["Prev Week Low",    "pw_low",   false],
-    ["4-Week Low",       "4w_low",   true],
-    ["ATR 5-day",        "atr_5d",   false],
-    ["ATR 20-day",       "atr_20d",  false],
+    ["4-Week High",     "4w_high",  true],
+    ["Prev Week High",  "pw_high",  false],
+    ["Prev Week Close", "pw_close", true],
+    ["Prev Week Mid",   "pw_mid",   false],
+    ["Prev Week Low",   "pw_low",   false],
+    ["4-Week Low",      "4w_low",   true],
+    ["ATR 5-day",       "atr_5d",   false],
+    ["ATR 20-day",      "atr_20d",  false],
   ];
   for (let i = 0; i < levels.length; i++) {
     const name = levels[i][0], key = levels[i][1], hi = levels[i][2];
@@ -706,7 +682,7 @@ function render(d) {
     ["Directional Accuracy", "76.9%",  "13 tradeable calls",          "var(--bull)"],
     ["RISK-ON Accuracy",     "100%",   "Perfect in full risk-on",      "var(--bull)"],
     ["LEAN BULL Accuracy",   "5 / 5",  "All lean bull calls correct",  "var(--bull)"],
-    ["Misses",               "2",      "April 2026 tariff catalyst",   "var(--mixed)"],
+    ["Misses",               "2",      "April 2026 tariff catalyst",   "var(--muted)"],
   ];
   const acc = el("div", {className:"acc"});
   acc.style.animationDelay = (_ci++ * 0.1) + "s";
@@ -767,8 +743,7 @@ fetch("bias_output.json")
     clearEl(app);
     const d = el("div", {className:"err"});
     d.appendChild(el("p", {}, "Could not load bias_output.json"));
-    d.appendChild(el("p", {style:{marginTop:"8px",fontSize:"11px",color:"var(--muted)"}},
-      err.message));
+    d.appendChild(el("p", {style:{marginTop:"8px",fontSize:"11px",color:"var(--muted)"}}, err.message));
     d.appendChild(el("p", {style:{marginTop:"4px",fontSize:"11px",color:"var(--muted)"}},
       "Ensure bias_output.json is in the same directory as index.html."));
     app.appendChild(d);
