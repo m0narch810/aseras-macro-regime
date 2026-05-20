@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pkl
+
+# Raw data
+data/raw/
+
+# Intraday processed files
+data/processed/*_1m_clean.csv
+data/processed/*_5m_clean.csv
+data/processed/*_15m_clean.csv

@@ -1,0 +1,13 @@
+pandas
+numpy
+scikit-learn
+xgboost
+lightgbm
+fredapi
+yfinance
+requests
+python-dotenv
+pandas-datareader
+optuna
+openpyxl
+xlrd
