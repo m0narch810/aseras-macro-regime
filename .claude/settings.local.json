@@ -11,7 +11,15 @@
       "Bash(python scripts/08_integrate_cot.py)",
       "Bash(python -c \"import optuna; print\\(optuna.__version__\\)\")",
       "mcp__plugin_claude-mem_mcp-search__get_observations",
-      "Bash(python -)"
+      "Bash(python -)",
+      "Bash(python scripts/02_macro_features.py)",
+      "Bash(PYTHONIOENCODING=utf-8 python scripts/02_macro_features.py)",
+      "Bash(PYTHONIOENCODING=utf-8 python scripts/03_feature_engineering.py)",
+      "Bash(PYTHONIOENCODING=utf-8 python scripts/04_train_model.py)",
+      "Bash(python -c \"import pandas as pd; df = pd.read_csv\\('data/processed/model_dataset_cot.csv', index_col=0\\); print\\(list\\(df.columns\\)\\)\")",
+      "Bash(PYTHONIOENCODING=utf-8 python scripts/08_integrate_cot.py)",
+      "Bash(python -c \"import pandas as pd; df = pd.read_csv\\('data/processed/model_dataset_cot.csv', index_col=0\\); print\\([c for c in df.columns if 'yield' in c or 'us2y' in c]\\)\")",
+      "Bash(PYTHONIOENCODING=utf-8 python scripts/05_weekly_report.py --live)"
     ]
   }
 }

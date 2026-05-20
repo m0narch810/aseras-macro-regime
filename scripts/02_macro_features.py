@@ -23,6 +23,7 @@ FRED_SERIES = {
     "rrp":    "RRPONTSYD",
     "tga":    "WTREGEN",
     "us10y":  "DGS10",
+    "us2y":   "DGS2",
 }
 
 # ── FRED FETCH ────────────────────────────────────────────────
@@ -97,6 +98,7 @@ w_walcl = to_weekly_last(walcl)
 w_tga   = to_weekly_last(tga)
 w_rrp   = to_weekly_mean(rrp)
 w_10y   = to_weekly_mean(raw["us10y"])
+w_2y    = to_weekly_mean(raw["us2y"])
 w_dxy   = to_weekly_mean(dxy.squeeze())
 w_vix   = to_weekly_mean(vix_raw)
 
@@ -111,13 +113,17 @@ macro = pd.DataFrame({
     "net_liq": net_liq,
     "vix":     w_vix,
     "us10y":   w_10y,
+    "us2y":    w_2y,
     "dxy":     w_dxy,
 }).ffill(limit=1).dropna()
+
+# Yield curve: 10Y - 2Y (2Y10Y spread)
+macro["yield_curve"] = macro["us10y"] - macro["us2y"]
 
 # ── COMPUTE CHANGES ───────────────────────────────────────────
 # WoW = week over week, 4W = 4 week change
 # These are the actual model inputs
-for col in ["net_liq", "vix", "us10y", "dxy"]:
+for col in ["net_liq", "vix", "us10y", "dxy", "yield_curve"]:
     macro[f"{col}_wow"] = macro[col].diff(1)
     macro[f"{col}_4w"]  = macro[col].diff(4)
 
@@ -125,7 +131,7 @@ for col in ["net_liq", "vix", "us10y", "dxy"]:
 # Shift all features forward 1 week so the model only sees
 # data that was published BEFORE the week it's predicting
 feature_cols = [c for c in macro.columns
-                if c not in ["walcl", "rrp", "tga"]]
+                if c not in ["walcl", "rrp", "tga", "us2y"]]
 macro[feature_cols] = macro[feature_cols].shift(1)
 
 macro = macro.dropna()
@@ -139,4 +145,5 @@ print(f"Shape: {macro.shape}  "
 print(f"\nExpected ~620 weeks. Got {len(macro)}.")
 print("\nSample (last 5 weeks):")
 print(macro[["net_liq", "net_liq_wow", "net_liq_4w",
-             "vix", "us10y", "dxy"]].tail())
+             "vix", "us10y", "dxy", "yield_curve",
+             "yield_curve_wow", "yield_curve_4w"]].tail())

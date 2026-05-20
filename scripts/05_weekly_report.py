@@ -78,6 +78,7 @@ walcl = fred_fetch("WALCL")   / 1000
 rrp   = fred_fetch("RRPONTSYD")
 tga   = fred_fetch("WTREGEN") / 1000
 us10y = fred_fetch("DGS10")
+us2y  = fred_fetch("DGS2")
 
 dxy = yf.download("DX-Y.NYB", start=macro_start, end=today,
                   interval="1d", progress=False)["Close"].squeeze()
@@ -96,17 +97,20 @@ macro = pd.DataFrame({
     "net_liq": net_liq,
     "vix":     to_weekly_mean(vix),
     "us10y":   to_weekly_mean(us10y),
+    "us2y":    to_weekly_mean(us2y),
     "dxy":     to_weekly_mean(dxy),
     "walcl":   to_weekly_last(walcl),
     "rrp":     to_weekly_mean(rrp),
     "tga":     to_weekly_last(tga),
 }).ffill(limit=1).dropna()
 
-for col in ["net_liq", "vix", "us10y", "dxy"]:
+macro["yield_curve"] = macro["us10y"] - macro["us2y"]
+
+for col in ["net_liq", "vix", "us10y", "dxy", "yield_curve"]:
     macro[f"{col}_wow"] = macro[col].diff(1)
     macro[f"{col}_4w"]  = macro[col].diff(4)
 
-feature_cols = [c for c in macro.columns if c not in ["walcl","rrp","tga"]]
+feature_cols = [c for c in macro.columns if c not in ["walcl","rrp","tga","us2y"]]
 macro[feature_cols] = macro[feature_cols].shift(1)
 macro = macro.dropna()
 
@@ -259,7 +263,8 @@ if not combined.empty:
 hist = pd.read_csv(os.path.join(PROC_DIR, "model_dataset_enriched.csv"),
                    index_col=0, parse_dates=True)
 MACRO_COLS = ["net_liq_wow", "net_liq_4w", "vix_wow", "vix_4w",
-              "us10y_wow", "us10y_4w", "dxy_wow", "dxy_4w"]
+              "us10y_wow", "us10y_4w", "dxy_wow", "dxy_4w",
+              "yield_curve_wow", "yield_curve_4w"]
 hist_vals = hist[MACRO_COLS].dropna()
 
 def pct_rank(val, hist_series, as_of):
@@ -281,6 +286,8 @@ def score_macro_live(row, as_of):
         "dxy_4w":      1 if p.get("dxy_4w",0.5)     <0.35 else(-1 if p.get("dxy_4w",0.5)     >0.65 else 0),
         "us10y_wow":   1 if p.get("us10y_wow",0.5)  <0.35 else(-1 if p.get("us10y_wow",0.5)  >0.70 else 0),
         "us10y_4w":    1 if p.get("us10y_4w",0.5)   <0.35 else(-1 if p.get("us10y_4w",0.5)   >0.70 else 0),
+        "yield_curve_wow": 1 if p.get("yield_curve_wow",0.5)>0.65 else(-1 if p.get("yield_curve_wow",0.5)<0.35 else 0),
+        "yield_curve_4w":  1 if p.get("yield_curve_4w",0.5) >0.65 else(-1 if p.get("yield_curve_4w",0.5) <0.35 else 0),
     }
     return sum(s.values()), s
 
@@ -322,7 +329,7 @@ def print_week(date, row, lv, save_list=None):
     print(f"  │ Period:        {week_start} → {week_end}")
     print(f"  │ Generated:     {datetime.today().strftime('%Y-%m-%d %H:%M')}")
     print(f"  │")
-    print(f"  │ MACRO REGIME:  {regime}  (score: {macro_score:+.0f}/8)")
+    print(f"  │ MACRO REGIME:  {regime}  (score: {macro_score:+.0f}/10)")
     if bull_f: print(f"  │   Bullish inputs: {', '.join(bull_f)}")
     if bear_f: print(f"  │   Bearish inputs: {', '.join(bear_f)}")
     print(f"  │")
