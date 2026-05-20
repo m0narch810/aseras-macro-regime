@@ -1,0 +1,65 @@
+{
+  "meta": {
+    "generated_at": "2026-05-20 15:54",
+    "week_start": "2026-05-14",
+    "week_end": "2026-05-20",
+    "instrument": "NQ / ES Futures"
+  },
+  "confluence": "STRONG BEAR",
+  "macro_regime": {
+    "name": "RISK-OFF",
+    "score": -3,
+    "max_score": 11,
+    "bullish_inputs": ["dxy_wow", "yield_curve_wow"],
+    "bearish_inputs": ["net_liq_wow", "vix_wow", "vix_4w", "us10y_wow", "us10y_4w"],
+    "factor_scores": {
+      "net_liq_wow": -1,
+      "net_liq_4w":   0,
+      "vix_wow":     -1,
+      "vix_4w":      -1,
+      "us10y_wow":   -1,
+      "us10y_4w":    -1,
+      "dxy_wow":      1,
+      "dxy_4w":       0,
+      "yield_curve_wow": 1,
+      "yield_curve_4w":  0,
+      "vix_ratio_wow":   0
+    }
+  },
+  "price_model": {
+    "direction": "BULLISH",
+    "probability": 0.53
+  },
+  "vol_forecast": {
+    "weekly_vol_pct": 2.0,
+    "percentile": 62,
+    "label": "NORMAL VOL"
+  },
+  "cot": {
+    "as_of": "2026-05-13",
+    "nq_lev_pctile": 0.42,
+    "nq_lev_wow": -0.0031,
+    "es_asset_mgr_net_pct": 0.087,
+    "lev_label": "NEUTRAL",
+    "positioning_interpretation": "NEUTRAL positioning — lev funds reducing slightly"
+  },
+  "vix_term_structure": {
+    "vix_ratio": 1.034,
+    "structure": "BACKWARDATION",
+    "mood": "stress",
+    "vvix": 96.4,
+    "ratio_wow": 0.028,
+    "direction": "rising",
+    "bias": "bearish"
+  },
+  "key_levels": {
+    "4w_high":  26045.50,
+    "pw_high":  25891.00,
+    "pw_close": 25658.25,
+    "pw_mid":   25458.00,
+    "pw_low":   25025.00,
+    "4w_low":   24887.75,
+    "atr_5d":   455.05,
+    "atr_20d":  398.51
+  }
+}
