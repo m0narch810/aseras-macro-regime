@@ -3,28 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ASERAS</title>
+<title>vαntα · Futures Bias Engine</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@300;400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,300&display=swap" rel="stylesheet">
 <style>
 
-/* ── TOKENS ─────────────────────────────────────────────────── */
+/* ── TOKENS ──────────────────────────────────────── */
 :root {
-  --bg:         #07000f;
-  --surface:    rgba(255,255,255,0.026);
-  --surface-hi: rgba(255,255,255,0.05);
-  --border:     rgba(167,100,255,0.13);
-  --border-hi:  rgba(167,100,255,0.28);
+  --bg:          #050509;
+  --bg-grid:     rgba(34,211,238,0.055);
+  --surface:     rgba(34,211,238,0.035);
+  --surface-hi:  rgba(34,211,238,0.065);
 
-  --text:   #ede8ff;
-  --muted:  rgba(200,172,255,0.48);
-  --ghost:  rgba(180,140,255,0.28);
+  --accent:      #22d3ee;
+  --accent-dim:  rgba(34,211,238,0.12);
+  --accent-glow: rgba(34,211,238,0.22);
+  --accent-sub:  rgba(34,211,238,0.6);
 
-  --purple:       #a855f7;
-  --purple-bright:#c084fc;
-  --purple-deep:  #7c3aed;
-  --purple-glow:  rgba(168,85,247,0.35);
+  --border:      rgba(34,211,238,0.13);
+  --border-hi:   rgba(34,211,238,0.28);
+
+  --text:  #eef2f7;
+  --muted: rgba(160,180,200,0.62);
+  --ghost: rgba(100,130,155,0.5);
 
   --bull:      #34d399;
   --bull-dim:  rgba(52,211,153,0.08);
@@ -38,434 +40,416 @@
 
   --mixed:      #fbbf24;
   --mixed-dim:  rgba(251,191,36,0.08);
-  --mixed-b:    rgba(251,191,36,0.2);
+  --mixed-b:    rgba(251,191,36,0.18);
   --mixed-glow: rgba(251,191,36,0.24);
 
   --blue:      #818cf8;
-  --blue-glow: rgba(129,140,248,0.28);
-
-  --blur: blur(28px) saturate(180%);
+  --blue-glow: rgba(129,140,248,0.25);
 }
 
-/* ── RESET ──────────────────────────────────────────────────── */
+/* ── RESET ───────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
 
+/* ── BASE ────────────────────────────────────────── */
 body {
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image: radial-gradient(circle, var(--bg-grid) 1px, transparent 1px);
+  background-size: 36px 36px;
   color: var(--text);
-  font-family: 'DM Mono', 'Courier New', monospace;
-  font-size: 13px;
-  line-height: 1.65;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
   min-height: 100vh;
   overflow-x: hidden;
 }
 
-/* ── ATMOSPHERE ─────────────────────────────────────────────── */
-.atm {
-  position: fixed; inset: 0;
-  pointer-events: none; z-index: 0; overflow: hidden;
-}
-
-/* Drifting orbs */
-.orb {
-  position: absolute; border-radius: 50%;
-  filter: blur(110px); will-change: transform;
-}
-.orb-1 {
-  width: 720px; height: 720px; opacity: .18;
-  background: radial-gradient(circle, #7c3aed 0%, #4c1d95 40%, transparent 68%);
-  top: -280px; left: -180px;
-  animation: orb1 30s ease-in-out infinite;
-}
-.orb-2 {
-  width: 520px; height: 520px; opacity: .13;
-  background: radial-gradient(circle, #6d28d9 0%, #3b0764 50%, transparent 70%);
-  bottom: -160px; right: -120px;
-  animation: orb2 38s ease-in-out infinite;
-}
-.orb-3 {
-  width: 380px; height: 380px; opacity: .10;
-  background: radial-gradient(circle, #9333ea 0%, transparent 65%);
-  top: 42%; left: 52%;
-  animation: orb3 24s ease-in-out infinite;
-}
-
-@keyframes orb1 {
-  0%,100% { transform: translate(0,0) scale(1); }
-  33%      { transform: translate(50px,-70px) scale(1.09); }
-  66%      { transform: translate(-35px,35px) scale(0.93); }
-}
-@keyframes orb2 {
-  0%,100% { transform: translate(0,0) scale(1); }
-  40%      { transform: translate(-60px,-45px) scale(1.07); }
-  75%      { transform: translate(40px,55px) scale(0.95); }
-}
-@keyframes orb3 {
-  0%,100% { transform: translate(0,0); }
-  50%      { transform: translate(70px,-90px); }
-}
-
-/* Subtle scanlines */
-.scanlines {
-  position: absolute; inset: 0;
-  background-image: repeating-linear-gradient(
-    0deg, transparent, transparent 2px,
-    rgba(255,255,255,0.007) 2px, rgba(255,255,255,0.007) 3px
+/* ── SCAN LINE ───────────────────────────────────── */
+.scan-line {
+  position: fixed; left: 0; width: 100%; height: 2px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(34,211,238,0.05) 15%,
+    rgba(34,211,238,0.18) 50%,
+    rgba(34,211,238,0.05) 85%,
+    transparent 100%
   );
+  pointer-events: none; z-index: 0;
+  animation: scan 14s linear infinite;
+}
+@keyframes scan {
+  0%   { top: -4px; opacity: 0; }
+  4%   { opacity: 1; }
+  96%  { opacity: 1; }
+  100% { top: 100vh; opacity: 0; }
 }
 
-/* Animated grain */
-.grain {
-  position: absolute; inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
-  opacity: 0.02;
-  animation: grain 0.4s steps(1) infinite;
-}
-@keyframes grain {
-  0%   { background-position: 0 0; }
-  25%  { background-position: -12px -18px; }
-  50%  { background-position: 18px -8px; }
-  75%  { background-position: -8px 22px; }
-  100% { background-position: 22px 12px; }
+/* ── TOP HALO ────────────────────────────────────── */
+.halo {
+  position: fixed; top: 0; left: 0; right: 0; height: 380px;
+  background: radial-gradient(ellipse 80% 240px at 50% -40px,
+    rgba(34,211,238,0.07) 0%, transparent 100%);
+  pointer-events: none; z-index: 0;
 }
 
-/* ── PAGE WRAPPER ───────────────────────────────────────────── */
+/* ── PAGE WRAPPER ────────────────────────────────── */
 .pw { position: relative; z-index: 1; }
 
-/* ── HEADER ─────────────────────────────────────────────────── */
+/* ── HEADER ──────────────────────────────────────── */
 header {
-  padding: 18px 32px;
   display: flex; justify-content: space-between; align-items: center;
-  border-bottom: 1px solid rgba(167,100,255,0.1);
-  background: rgba(7,0,15,0.65);
-  backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
+  padding: 13px 32px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(5,5,9,0.88);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   position: sticky; top: 0; z-index: 100;
 }
 
 .brand {
-  font-family: 'Oxanium', sans-serif;
-  font-size: 20px; font-weight: 800;
-  letter-spacing: 0.3em;
+  font-family: 'Syne', sans-serif;
+  font-weight: 800; font-size: 18px;
+  letter-spacing: 0.14em;
   color: var(--text);
-  text-shadow: 0 0 28px rgba(168,85,247,0.55);
+  user-select: none;
+}
+.brand .alph {
+  color: var(--accent);
+  text-shadow: 0 0 20px var(--accent-glow);
 }
 
-.header-right { display: flex; align-items: center; gap: 16px; }
+.header-right { display: flex; align-items: center; gap: 22px; }
 
-.live-pip {
+.hdr-tag {
+  font-family: 'Syne', sans-serif;
+  font-size: 8.5px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--ghost);
+}
+
+.live-dot {
   display: flex; align-items: center; gap: 7px;
-  font-family: 'Oxanium', sans-serif;
-  font-size: 9px; letter-spacing: 0.18em;
-  color: var(--ghost); text-transform: uppercase;
+  font-family: 'Syne', sans-serif;
+  font-size: 8.5px; letter-spacing: 0.22em;
+  text-transform: uppercase; color: var(--ghost);
 }
-.live-pip::before {
-  content: '';
-  display: block; width: 6px; height: 6px;
-  background: var(--bull); border-radius: 50%;
+.live-dot::before {
+  content: ''; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--bull);
   box-shadow: 0 0 8px var(--bull-glow);
-  animation: pip 2.2s ease-in-out infinite;
+  animation: blink 2.4s ease-in-out infinite;
 }
-@keyframes pip {
-  0%,100% { opacity: 1; }
-  50%      { opacity: 0.25; }
-}
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.18; } }
 
-#meta-ts { font-size: 10px; color: var(--ghost); }
-
-/* ── MAIN ───────────────────────────────────────────────────── */
+/* ── MAIN ────────────────────────────────────────── */
 main {
-  position: relative; z-index: 1;
-  max-width: 1120px; margin: 0 auto;
-  padding: 26px 24px;
+  max-width: 1160px; margin: 0 auto;
+  padding: 22px 28px 44px;
 }
 
-/* ── LOAD ANIMATION ─────────────────────────────────────────── */
+/* ── ANIMATIONS ──────────────────────────────────── */
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(18px); }
+  from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── GLASS CARD ─────────────────────────────────────────────── */
+/* ── SECTION LABEL ───────────────────────────────── */
+.sec-lbl {
+  font-family: 'Syne', sans-serif;
+  font-size: 8px; letter-spacing: 0.28em;
+  text-transform: uppercase; color: var(--ghost);
+  margin-bottom: 10px;
+  display: flex; align-items: center; gap: 10px;
+}
+.sec-lbl::after {
+  content: ''; flex: 1; height: 1px;
+  background: linear-gradient(90deg, rgba(34,211,238,0.15), transparent);
+}
+
+/* ── CARD ────────────────────────────────────────── */
 .card {
   background: var(--surface);
-  backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 20px 22px;
+  border-radius: 2px;
+  padding: 18px 20px;
   opacity: 0;
-  animation: fadeUp 0.65s cubic-bezier(0.16,1,0.3,1) forwards;
-  transition: border-color 0.3s ease, background 0.3s ease,
-              box-shadow 0.3s ease;
+  animation: fadeUp 0.6s cubic-bezier(0.16,1,0.3,1) forwards;
+  position: relative;
+  overflow: hidden;
+  transition: background 0.22s, border-color 0.22s;
 }
-.card:hover {
-  background: var(--surface-hi);
-  border-color: var(--border-hi);
-  box-shadow: 0 0 28px rgba(167,100,255,0.07);
+.card::after {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.22s;
 }
+.card:hover { background: var(--surface-hi); border-color: var(--border-hi); }
+.card:hover::after { opacity: 0.45; }
 
 .card-title {
-  font-family: 'Oxanium', sans-serif;
-  font-size: 8.5px; font-weight: 400;
-  letter-spacing: 0.2em; text-transform: uppercase;
+  font-family: 'Syne', sans-serif;
+  font-size: 7.5px; font-weight: 600;
+  letter-spacing: 0.24em; text-transform: uppercase;
   color: var(--ghost);
-  margin-bottom: 16px; padding-bottom: 11px;
-  border-bottom: 1px solid rgba(167,100,255,0.08);
+  margin-bottom: 14px; padding-bottom: 10px;
+  border-bottom: 1px solid rgba(34,211,238,0.07);
 }
 
-/* ── GRIDS ──────────────────────────────────────────────────── */
-.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; margin-bottom: 13px; }
-.g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 13px; margin-bottom: 13px; }
-@media (max-width: 780px) { .g2,.g3 { grid-template-columns: 1fr; } }
+/* ── GRIDS ───────────────────────────────────────── */
+.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+@media (max-width: 820px) { .g2,.g3 { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 540px) { .g2,.g3 { grid-template-columns: 1fr; } }
 
-/* ── KV ROW ─────────────────────────────────────────────────── */
-.kv { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px; }
+/* ── KV ROW ──────────────────────────────────────── */
+.kv {
+  display: flex; justify-content: space-between;
+  align-items: baseline; gap: 8px; margin-bottom: 6px;
+}
 .kv:last-child { margin-bottom: 0; }
-.kk { font-size: 10px; color: var(--muted); letter-spacing: 0.02em; }
+.kk { font-size: 9.5px; color: var(--ghost); white-space: nowrap; }
 
-/* ── HERO ───────────────────────────────────────────────────── */
+/* ── HERO ────────────────────────────────────────── */
 #hero {
-  border-radius: 16px; padding: 36px 42px;
-  margin-bottom: 14px;
+  padding: 32px 36px; margin-bottom: 10px;
+  border: 1px solid var(--border); border-radius: 2px;
   display: flex; align-items: center;
-  justify-content: space-between; gap: 24px;
-  backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
+  justify-content: space-between; gap: 20px;
+  background: var(--surface);
   opacity: 0;
-  animation: fadeUp 0.8s cubic-bezier(0.16,1,0.3,1) 0.04s forwards;
+  animation: fadeUp 0.7s cubic-bezier(0.16,1,0.3,1) 0.03s forwards;
+  position: relative; overflow: hidden;
 }
+#hero::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+}
+#hero.bull::before  { background: var(--bull);  box-shadow: 4px 0 20px var(--bull-glow); }
+#hero.bear::before  { background: var(--bear);  box-shadow: 4px 0 20px var(--bear-glow); }
+#hero.mixed::before { background: var(--mixed); box-shadow: 4px 0 20px var(--mixed-glow); }
+#hero::after {
+  content: '';
+  position: absolute; right: 20px; bottom: 16px;
+  width: 16px; height: 16px;
+  border-right: 1px solid rgba(34,211,238,0.22);
+  border-bottom: 1px solid rgba(34,211,238,0.22);
+}
+#hero.bull  { border-color: rgba(52,211,153,0.24);  box-shadow: 0 0 60px rgba(52,211,153,0.06); }
+#hero.bear  { border-color: rgba(248,113,113,0.24); box-shadow: 0 0 60px rgba(248,113,113,0.06); }
+#hero.mixed { border-color: rgba(251,191,36,0.2);   box-shadow: 0 0 60px rgba(251,191,36,0.05); }
 
-#hero.bull {
-  background: rgba(52,211,153,0.05);
-  border: 1px solid rgba(52,211,153,0.26);
-  box-shadow: 0 0 55px rgba(52,211,153,0.09), inset 0 0 35px rgba(52,211,153,0.03);
-  animation: fadeUp 0.8s cubic-bezier(0.16,1,0.3,1) 0.04s forwards,
-             glowBull 3.4s ease-in-out 1s infinite;
+.hero-eyebrow {
+  font-family: 'Syne', sans-serif;
+  font-size: 8px; letter-spacing: 0.3em;
+  text-transform: uppercase; color: var(--ghost); margin-bottom: 8px;
 }
-#hero.bear {
-  background: rgba(248,113,113,0.05);
-  border: 1px solid rgba(248,113,113,0.26);
-  box-shadow: 0 0 55px rgba(248,113,113,0.09), inset 0 0 35px rgba(248,113,113,0.03);
-  animation: fadeUp 0.8s cubic-bezier(0.16,1,0.3,1) 0.04s forwards,
-             glowBear 3.4s ease-in-out 1s infinite;
-}
-#hero.mixed {
-  background: rgba(251,191,36,0.04);
-  border: 1px solid rgba(251,191,36,0.2);
-  box-shadow: 0 0 55px rgba(251,191,36,0.07);
-  animation: fadeUp 0.8s cubic-bezier(0.16,1,0.3,1) 0.04s forwards,
-             glowMix 3.4s ease-in-out 1s infinite;
-}
-
-@keyframes glowBull {
-  0%,100% { box-shadow: 0 0 40px rgba(52,211,153,0.09); }
-  50%      { box-shadow: 0 0 80px rgba(52,211,153,0.18); }
-}
-@keyframes glowBear {
-  0%,100% { box-shadow: 0 0 40px rgba(248,113,113,0.09); }
-  50%      { box-shadow: 0 0 80px rgba(248,113,113,0.18); }
-}
-@keyframes glowMix {
-  0%,100% { box-shadow: 0 0 40px rgba(251,191,36,0.07); }
-  50%      { box-shadow: 0 0 75px rgba(251,191,36,0.14); }
-}
-
 #hero-label {
-  font-family: 'Oxanium', sans-serif;
-  font-size: 44px; font-weight: 700;
-  letter-spacing: 0.1em; line-height: 1;
+  font-family: 'Syne', sans-serif;
+  font-size: 54px; font-weight: 800;
+  letter-spacing: 0.05em; line-height: 1;
 }
-#hero.bull  #hero-label { color: var(--bull); text-shadow: 0 0 40px rgba(52,211,153,0.55); }
-#hero.bear  #hero-label { color: var(--bear); text-shadow: 0 0 40px rgba(248,113,113,0.55); }
-#hero.mixed #hero-label { color: var(--mixed); text-shadow: 0 0 40px rgba(251,191,36,0.55); }
+#hero.bull  #hero-label { color: var(--bull);  text-shadow: 0 0 55px rgba(52,211,153,0.42); }
+#hero.bear  #hero-label { color: var(--bear);  text-shadow: 0 0 55px rgba(248,113,113,0.42); }
+#hero.mixed #hero-label { color: var(--mixed); text-shadow: 0 0 55px rgba(251,191,36,0.42); }
 
-#hero-sub { color: var(--muted); font-size: 11px; margin-top: 9px; letter-spacing: 0.04em; }
+#hero-sub { margin-top: 10px; color: var(--muted); font-size: 10.5px; letter-spacing: 0.04em; }
 
-#hero-right { text-align: right; }
-.wlbl { color: var(--ghost); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; font-family: 'Oxanium', sans-serif; }
-.wval { font-size: 13px; color: var(--muted); margin-top: 3px; }
+#hero-right { text-align: right; flex-shrink: 0; }
+.wlbl {
+  font-family: 'Syne', sans-serif;
+  font-size: 7.5px; letter-spacing: 0.22em;
+  text-transform: uppercase; color: var(--ghost);
+}
+.wval { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
 
-/* ── REGIME ─────────────────────────────────────────────────── */
+/* ── REGIME ──────────────────────────────────────── */
 .rname {
-  font-family: 'Oxanium', sans-serif;
-  font-size: 17px; font-weight: 600;
-  letter-spacing: 0.07em;
+  font-family: 'Syne', sans-serif;
+  font-size: 19px; font-weight: 700;
+  letter-spacing: 0.06em; margin-bottom: 4px;
 }
 .rname.bull  { color: var(--bull); }
 .rname.bear  { color: var(--bear); }
 .rname.mixed { color: var(--mixed); }
 
 .rscore {
-  display: inline-block;
-  font-size: 11px; color: var(--ghost);
-  background: rgba(167,100,255,0.08);
-  border: 1px solid rgba(167,100,255,0.15);
-  border-radius: 5px; padding: 2px 9px;
-  margin-left: 10px; vertical-align: middle;
+  font-size: 10px; color: var(--ghost);
+  background: rgba(34,211,238,0.06);
+  border: 1px solid rgba(34,211,238,0.14);
+  border-radius: 2px; padding: 2px 8px;
+  display: inline-block; margin-bottom: 14px;
 }
 
 .factor-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(106px, 1fr));
-  gap: 6px; margin-top: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 5px; margin-top: 12px;
 }
 .fc {
-  border-radius: 7px; padding: 6px 9px;
-  font-size: 10px;
+  border-radius: 2px; padding: 5px 8px; font-size: 9.5px;
   display: flex; justify-content: space-between; align-items: center;
-  border: 1px solid transparent;
-  transition: box-shadow 0.25s ease;
+  border: 1px solid transparent; transition: box-shadow 0.2s;
 }
-.fc.pos { background: var(--bull-dim); border-color: var(--bull-b); color: var(--bull); }
-.fc.neg { background: var(--bear-dim); border-color: var(--bear-b); color: var(--bear); }
-.fc.zero { background: rgba(255,255,255,0.02); border-color: rgba(167,100,255,0.07); color: var(--ghost); }
-.fc.pos:hover  { box-shadow: 0 0 18px var(--bull-glow); }
-.fc.neg:hover  { box-shadow: 0 0 18px var(--bear-glow); }
-.fc .fn { font-size: 9px; opacity: 0.78; }
-.fc .fv { font-weight: 600; font-size: 11px; }
+.fc.pos  { background: var(--bull-dim);  border-color: var(--bull-b);  color: var(--bull); }
+.fc.neg  { background: var(--bear-dim);  border-color: var(--bear-b);  color: var(--bear); }
+.fc.zero { background: rgba(34,211,238,0.03); border-color: rgba(34,211,238,0.09); color: var(--ghost); }
+.fc.pos:hover  { box-shadow: 0 0 14px var(--bull-glow); }
+.fc.neg:hover  { box-shadow: 0 0 14px var(--bear-glow); }
+.fc .fn { font-size: 8.5px; opacity: 0.72; }
+.fc .fv { font-weight: 700; font-size: 11px; }
 
-/* ── DIRECTION / PRICE ──────────────────────────────────────── */
+/* ── DIRECTION ───────────────────────────────────── */
 .dirb {
-  font-family: 'Oxanium', sans-serif;
-  font-size: 24px; font-weight: 700;
-  letter-spacing: 0.08em; margin-bottom: 4px;
+  font-family: 'Syne', sans-serif;
+  font-size: 28px; font-weight: 800;
+  letter-spacing: 0.06em; margin-bottom: 4px;
 }
-.dirb.bull { color: var(--bull); text-shadow: 0 0 22px rgba(52,211,153,0.5); }
-.dirb.bear { color: var(--bear); text-shadow: 0 0 22px rgba(248,113,113,0.5); }
+.dirb.bull { color: var(--bull); text-shadow: 0 0 24px rgba(52,211,153,0.44); }
+.dirb.bear { color: var(--bear); text-shadow: 0 0 24px rgba(248,113,113,0.44); }
 
-.pbar-w { height: 3px; background: rgba(255,255,255,0.06); border-radius: 2px; margin: 10px 0; }
-.pbar   { height: 3px; border-radius: 2px; }
-.pbar.bull { background: linear-gradient(90deg,rgba(52,211,153,.4),var(--bull)); box-shadow: 0 0 8px var(--bull-glow); }
-.pbar.bear { background: linear-gradient(90deg,rgba(248,113,113,.4),var(--bear)); box-shadow: 0 0 8px var(--bear-glow); }
+.pbar-w { height: 3px; background: rgba(255,255,255,0.05); border-radius: 1px; margin: 10px 0; }
+.pbar   { height: 3px; border-radius: 1px; }
+.pbar.bull { background: linear-gradient(90deg, rgba(52,211,153,.3), var(--bull)); box-shadow: 0 0 7px var(--bull-glow); }
+.pbar.bear { background: linear-gradient(90deg, rgba(248,113,113,.3), var(--bear)); box-shadow: 0 0 7px var(--bear-glow); }
 
-/* ── VIX BADGE ──────────────────────────────────────────────── */
+/* ── VIX BADGE ───────────────────────────────────── */
 .vbadge {
   display: inline-block;
-  font-family: 'Oxanium', sans-serif;
-  font-size: 11px; font-weight: 600;
-  letter-spacing: 0.1em;
-  border-radius: 6px; padding: 4px 13px;
-  margin-bottom: 14px; border: 1px solid transparent;
+  font-family: 'Syne', sans-serif;
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  border-radius: 2px; padding: 3px 12px;
+  margin-bottom: 12px; border: 1px solid transparent;
 }
-.vbadge.back { background: var(--bear-dim); border-color: var(--bear-b); color: var(--bear); box-shadow: 0 0 14px var(--bear-glow); }
-.vbadge.cont { background: var(--bull-dim); border-color: var(--bull-b); color: var(--bull); box-shadow: 0 0 14px var(--bull-glow); }
+.vbadge.back { background: var(--bear-dim); border-color: var(--bear-b); color: var(--bear); box-shadow: 0 0 12px var(--bear-glow); }
+.vbadge.cont { background: var(--bull-dim); border-color: var(--bull-b); color: var(--bull); box-shadow: 0 0 12px var(--bull-glow); }
 
-/* ── COT PCTILE BAR ─────────────────────────────────────────── */
-.pb-w { height: 5px; background: rgba(255,255,255,0.05); border-radius: 3px; margin: 9px 0; position: relative; }
-.pb-f { height: 5px; border-radius: 3px; }
-.pb-m { position: absolute; top: -4px; width: 1px; height: 13px; background: rgba(200,160,255,0.3); }
+/* ── COT BAR ─────────────────────────────────────── */
+.pb-w { height: 4px; background: rgba(255,255,255,0.05); border-radius: 1px; margin: 8px 0; position: relative; }
+.pb-f { height: 4px; border-radius: 1px; }
+.pb-m { position: absolute; top: -4px; width: 1px; height: 12px; background: rgba(34,211,238,0.3); }
 
-/* ── KEY LEVELS ─────────────────────────────────────────────── */
+/* ── KEY LEVELS ──────────────────────────────────── */
 .lvl-tbl { width: 100%; border-collapse: collapse; }
-.lvl-tbl td { padding: 5px 0; border-bottom: 1px solid rgba(167,100,255,0.06); }
+.lvl-tbl td { padding: 5px 0; border-bottom: 1px solid rgba(34,211,238,0.05); }
 .lvl-tbl tr:last-child td { border-bottom: none; }
 .ln { font-size: 10px; color: var(--muted); }
-.lv { text-align: right; font-size: 13px; color: var(--blue); }
-.lv.hi { color: var(--text) !important; font-weight: 500; text-shadow: 0 0 12px var(--blue-glow); }
+.lv { text-align: right; font-size: 13px; color: var(--accent-sub); }
+.lv.hi { color: var(--text) !important; font-weight: 500; text-shadow: 0 0 10px var(--accent-glow); }
 
-/* ── ACCURACY STRIP ─────────────────────────────────────────── */
+/* ── ACCURACY STRIP ──────────────────────────────── */
 .acc {
   background: var(--surface);
-  backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 20px 28px;
-  margin-bottom: 13px;
+  border-radius: 2px;
+  padding: 20px 28px; margin-bottom: 10px;
   display: flex; gap: 0;
   opacity: 0;
-  animation: fadeUp 0.65s cubic-bezier(0.16,1,0.3,1) forwards;
+  animation: fadeUp 0.6s cubic-bezier(0.16,1,0.3,1) forwards;
 }
-.as { flex: 1; padding: 0 28px; }
+.as { flex: 1; padding: 0 24px; }
 .as:first-child { padding-left: 0; }
 .as:last-child  { padding-right: 0; }
-.as + .as { border-left: 1px solid rgba(167,100,255,0.1); }
-.al { font-family: 'Oxanium', sans-serif; font-size: 8.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ghost); }
-.av { font-family: 'Oxanium', sans-serif; font-size: 26px; font-weight: 700; color: var(--bull); margin: 4px 0 2px; }
-.as2 { font-size: 10px; color: var(--muted); }
+.as + .as { border-left: 1px solid rgba(34,211,238,0.08); }
+.al { font-family: 'Syne', sans-serif; font-size: 7.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ghost); }
+.av { font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; margin: 4px 0 2px; }
+.as2 { font-size: 9.5px; color: var(--muted); }
 
-/* ── HISTORY ────────────────────────────────────────────────── */
-.hist-wrap { margin-top: 14px; }
-.hist-title {
-  font-family: 'Oxanium', sans-serif;
-  font-size: 8.5px; letter-spacing: 0.2em; text-transform: uppercase;
-  color: var(--ghost); margin-bottom: 11px; padding-left: 2px;
-}
+/* ── HISTORY ─────────────────────────────────────── */
+.hist-wrap { margin-top: 10px; }
 table.hist { width: 100%; border-collapse: collapse; font-size: 11px; }
 .hist th {
   text-align: left;
-  font-family: 'Oxanium', sans-serif;
-  font-size: 8px; letter-spacing: 0.14em;
-  text-transform: uppercase; color: var(--ghost);
-  padding: 9px 14px; border-bottom: 1px solid rgba(167,100,255,0.1);
-  font-weight: 400;
+  font-family: 'Syne', sans-serif;
+  font-size: 7.5px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--ghost); padding: 10px 14px;
+  border-bottom: 1px solid rgba(34,211,238,0.1); font-weight: 600;
 }
-.hist td { padding: 8px 14px; border-bottom: 1px solid rgba(167,100,255,0.05); transition: background 0.2s; }
-.hist tr:hover td { background: rgba(167,100,255,0.04); }
+.hist td {
+  padding: 7px 14px;
+  border-bottom: 1px solid rgba(34,211,238,0.04);
+  transition: background 0.15s;
+}
+.hist tr:hover td { background: rgba(34,211,238,0.025); }
+.hist tr:last-child td { border-bottom: none; }
 
-/* ── TAGS ───────────────────────────────────────────────────── */
+/* ── TAGS ────────────────────────────────────────── */
 .tag {
-  display: inline-block; border-radius: 5px;
-  padding: 2px 9px;
-  font-family: 'Oxanium', sans-serif;
-  font-size: 9px; font-weight: 600;
-  letter-spacing: 0.06em;
-  border: 1px solid transparent;
+  display: inline-block; border-radius: 2px;
+  padding: 1px 7px;
+  font-family: 'Syne', sans-serif;
+  font-size: 8.5px; font-weight: 700;
+  letter-spacing: 0.07em;
+  border: 1px solid transparent; white-space: nowrap;
 }
 .tag.bull  { background: var(--bull-dim);  border-color: var(--bull-b);  color: var(--bull); }
 .tag.bear  { background: var(--bear-dim);  border-color: var(--bear-b);  color: var(--bear); }
 .tag.mixed { background: var(--mixed-dim); border-color: var(--mixed-b); color: var(--mixed); }
 
-/* ── FOOTER ─────────────────────────────────────────────────── */
+/* ── INTERPRETATION BOX ──────────────────────────── */
+.interp {
+  margin-top: 10px; padding: 8px 10px;
+  background: rgba(34,211,238,0.04);
+  border: 1px solid rgba(34,211,238,0.1);
+  border-radius: 2px;
+  font-size: 11px; color: var(--muted);
+  font-style: italic;
+}
+
+/* ── FOOTER ──────────────────────────────────────── */
 footer {
   position: relative; z-index: 1;
   text-align: center; color: var(--ghost);
-  font-size: 10px; letter-spacing: 0.06em;
-  padding: 32px 24px;
-  border-top: 1px solid rgba(167,100,255,0.07);
-  margin-top: 28px;
+  font-size: 9.5px; letter-spacing: 0.08em;
+  padding: 26px 24px;
+  border-top: 1px solid rgba(34,211,238,0.06); margin-top: 32px;
 }
+footer .alph { color: var(--accent-sub); }
 
-/* ── MISC ───────────────────────────────────────────────────── */
+/* ── MISC ────────────────────────────────────────── */
 .loading {
   color: var(--ghost); text-align: center; padding: 80px;
-  font-family: 'Oxanium', sans-serif; letter-spacing: 0.22em; font-size: 12px;
+  font-family: 'Syne', sans-serif; letter-spacing: 0.26em;
+  font-size: 11px; text-transform: uppercase;
 }
 .err { color: var(--bear); text-align: center; padding: 80px; }
 
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: rgba(167,100,255,0.3); border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: rgba(34,211,238,0.22); border-radius: 1px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(34,211,238,0.4); }
+
 </style>
 </head>
 <body>
 
-<!-- Background atmosphere -->
-<div class="atm">
-  <div class="orb orb-1"></div>
-  <div class="orb orb-2"></div>
-  <div class="orb orb-3"></div>
-  <div class="scanlines"></div>
-  <div class="grain"></div>
-</div>
+<div class="scan-line"></div>
+<div class="halo"></div>
 
 <div class="pw">
+
   <header>
-    <div class="brand">ASERAS</div>
+    <div class="brand">v<span class="alph">&#945;</span>nt<span class="alph">&#945;</span></div>
     <div class="header-right">
-      <div class="live-pip">Live</div>
-      <div id="meta-ts"></div>
+      <div class="hdr-tag" id="meta-ts"></div>
+      <div class="live-dot">Live</div>
     </div>
   </header>
 
-  <main id="app"><div class="loading">Initializing…</div></main>
+  <main id="app"><div class="loading">Initializing&hellip;</div></main>
 
-  <footer>NQ · ES Equity Index Futures &nbsp;·&nbsp; Weekly timeframe only &nbsp;·&nbsp; Not financial advice</footer>
+  <footer>
+    NQ &middot; ES Equity Index Futures &nbsp;&middot;&nbsp; Weekly timeframe only &nbsp;&middot;&nbsp; Not financial advice
+    &nbsp;&mdash;&nbsp;
+    v<span class="alph">&#945;</span>nt<span class="alph">&#945;</span> Bias Engine
+  </footer>
+
 </div>
 
 <script>
-// ── HISTORICAL DATA ────────────────────────────────────────────
+// ── HISTORICAL DATA ────────────────────────────────
 const HIST = [
   { date:"2026-02-05", regime:"LEAN RISK-OFF", score:-1, dir:"BULLISH", prob:0.502, vol:0.0172, conf:"LEAN BEAR" },
   { date:"2026-02-12", regime:"LEAN RISK-OFF", score:-2, dir:"BULLISH", prob:0.502, vol:0.0156, conf:"LEAN BEAR" },
@@ -485,12 +469,7 @@ const HIST = [
   { date:"2026-05-21", regime:"LEAN RISK-OFF", score:-2, dir:"BEARISH", prob:0.499, vol:0.0137, conf:"LEAN BEAR" },
 ];
 
-// ── HELPERS ───────────────────────────────────────────────────
-function esc(v) {
-  return String(v)
-    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
-    .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-}
+// ── HELPERS ───────────────────────────────────────
 function cc(v) {
   if (!v) return "mixed";
   const u = String(v).toUpperCase();
@@ -500,94 +479,118 @@ function cc(v) {
 }
 function dc(v) { return String(v).toUpperCase().includes("BULL") ? "bull" : "bear"; }
 function sgn(v) { return (v >= 0 ? "+" : "") + v; }
-function fc(v) { return v > 0 ? "pos" : v < 0 ? "neg" : "zero"; }
-function pct(v, d=1) { return (v * 100).toFixed(d) + "%"; }
+function fc(v)  { return v > 0 ? "pos" : v < 0 ? "neg" : "zero"; }
+function pct(v, d) { return (v * 100).toFixed(d === undefined ? 1 : d) + "%"; }
 
-// ── DOM BUILDER HELPERS ────────────────────────────────────────
-function el(tag, attrs, ...children) {
+// safe text node helper
+function txt(v) { return document.createTextNode(String(v)); }
+
+// ── DOM HELPERS ───────────────────────────────────
+function el(tag, attrs) {
   const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs || {})) {
-    if (k === "className") e.className = v;
-    else if (k === "style") Object.assign(e.style, v);
-    else e.setAttribute(k, v);
+  const children = Array.prototype.slice.call(arguments, 2);
+  for (const k in (attrs || {})) {
+    if (k === "className") e.className = attrs[k];
+    else if (k === "style") Object.assign(e.style, attrs[k]);
+    else e.setAttribute(k, attrs[k]);
   }
-  for (const c of children) {
+  for (let i = 0; i < children.length; i++) {
+    const c = children[i];
     if (c == null) continue;
-    e.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+    e.appendChild(typeof c === "string" ? txt(c) : c);
   }
   return e;
 }
 function kv(key, val, valStyle) {
   const r = el("div", {className:"kv"});
   r.appendChild(el("span", {className:"kk"}, key));
-  const vs = el("span", {style: valStyle || {}}, val);
+  const vs = el("span", valStyle ? {style: valStyle} : {}, val);
   r.appendChild(vs);
   return r;
 }
-function tag(text, cls) {
-  return el("span", {className:`tag ${cls}`}, text);
-}
-function bar(pct_val, color, height="4px") {
-  const w = el("div", {className:"pbar-w", style:{height}});
-  const f = el("div", {className:"pbar", style:{
-    width: Math.max(3, Math.min(100, pct_val)) + "%",
-    height, background: color, borderRadius:"2px"
-  }});
+function tagEl(text, cls) { return el("span", {className:"tag " + cls}, text); }
+function barEl(pct_val, cls) {
+  const w = el("div", {className:"pbar-w"});
+  const f = el("div", {className:"pbar " + cls});
+  f.style.width = Math.max(3, Math.min(100, pct_val)) + "%";
   w.appendChild(f);
   return w;
 }
 
-// Animation delay counter — purely visual, incremented per card
-let _ci = 0;
-function card(titleText, ...children) {
-  const c = el("div", {className:"card"});
-  c.style.animationDelay = (_ci++ * 0.11) + "s";
-  c.appendChild(el("div", {className:"card-title"}, titleText));
-  for (const ch of children) { if (ch) c.appendChild(ch); }
-  return c;
+function clearEl(node) {
+  while (node.firstChild) node.removeChild(node.firstChild);
 }
 
-// ── RENDER ────────────────────────────────────────────────────
+let _ci = 0;
+function card(titleText) {
+  const children = Array.prototype.slice.call(arguments, 1);
+  const c = el("div", {className:"card"});
+  c.style.animationDelay = (_ci++ * 0.1) + "s";
+  c.appendChild(el("div", {className:"card-title"}, titleText));
+  for (let i = 0; i < children.length; i++) {
+    if (children[i]) c.appendChild(children[i]);
+  }
+  return c;
+}
+function secLbl(text) { return el("div", {className:"sec-lbl"}, text); }
+
+// ── RENDER ────────────────────────────────────────
 function render(d) {
   _ci = 0;
   const app = document.getElementById("app");
-  app.innerHTML = "";
+  clearEl(app);
 
-  const { meta, confluence, macro_regime: mr, price_model: pm,
-          vol_forecast: vf, cot, vix_term_structure: vts, key_levels: kl } = d;
+  const mr  = d.macro_regime;
+  const pm  = d.price_model;
+  const vf  = d.vol_forecast;
+  const cot = d.cot;
+  const vts = d.vix_term_structure;
+  const kl  = d.key_levels;
+  const meta = d.meta;
+  const confluence = d.confluence;
 
-  // Header timestamp
+  // header timestamp
   document.getElementById("meta-ts").textContent =
-    "Generated: " + (meta.generated_at || "—");
+    "Generated " + (meta.generated_at || "—");
 
-  // ── CONFLUENCE HERO
+  // ── HERO ──
   const hero = el("div", {id:"hero", className: cc(confluence)});
   const heroL = el("div");
-  heroL.appendChild(el("div", {id:"hero-label"}, esc(confluence)));
-  heroL.appendChild(el("div", {id:"hero-sub"}, esc(meta.instrument || "NQ / ES") + " · Macro Regime + Price Model"));
+  heroL.appendChild(el("div", {className:"hero-eyebrow"}, "Weekly Confluence"));
+  heroL.appendChild(el("div", {id:"hero-label"}, String(confluence)));
+  heroL.appendChild(el("div", {id:"hero-sub"},
+    String(meta.instrument || "NQ / ES") + " · Macro Regime + Price Model"));
   const heroR = el("div", {id:"hero-right"});
-  heroR.appendChild(el("div", {className:"wlbl"}, "WEEK"));
-  heroR.appendChild(el("div", {className:"wval"}, esc(meta.week_start) + " → " + esc(meta.week_end)));
+  heroR.appendChild(el("div", {className:"wlbl"}, "Analysis Window"));
+  heroR.appendChild(el("div", {className:"wval"},
+    String(meta.week_start) + " → " + String(meta.week_end)));
   hero.appendChild(heroL);
   hero.appendChild(heroR);
   app.appendChild(hero);
 
-  // ── ROW 1: MACRO + PRICE + VOL
+  // ── ROW 1 ──
+  app.appendChild(secLbl("Signal Breakdown"));
   const row1 = el("div", {className:"g3"});
 
-  // Macro Regime Card
+  // Macro Regime
   const macroCard = card("Macro Regime");
-  const rRow = el("div", {style:{marginBottom:"14px"}});
-  rRow.appendChild(el("span", {className:`rname ${cc(mr.name)}`}, esc(mr.name)));
-  rRow.appendChild(el("span", {className:"rscore"}, sgn(mr.score) + " / " + mr.max_score));
-  macroCard.appendChild(rRow);
-  const bullInputs = (mr.bullish_inputs || []).join(", ") || "—";
-  const bearInputs = (mr.bearish_inputs || []).join(", ") || "—";
-  macroCard.appendChild(kv("Bullish inputs", bullInputs, {color:"var(--bull)"}));
-  macroCard.appendChild(kv("Bearish inputs", bearInputs, {color:"var(--bear)"}));
+  const rDiv = el("div", {style:{marginBottom:"14px"}});
+  rDiv.appendChild(el("div", {className:"rname " + cc(mr.name)}, String(mr.name)));
+  rDiv.appendChild(el("span", {className:"rscore"},
+    "Score " + sgn(mr.score) + " / " + mr.max_score));
+  macroCard.appendChild(rDiv);
+  macroCard.appendChild(kv("Bullish inputs",
+    (mr.bullish_inputs || []).join(", ") || "—",
+    {color:"var(--bull)"}));
+  macroCard.appendChild(kv("Bearish inputs",
+    (mr.bearish_inputs || []).join(", ") || "—",
+    {color:"var(--bear)"}));
   const fg = el("div", {className:"factor-grid"});
-  for (const [k, v] of Object.entries(mr.factor_scores || {})) {
-    const chip = el("div", {className:`fc ${fc(v)}`});
+  const fs = mr.factor_scores || {};
+  for (const k in fs) {
+    if (!Object.prototype.hasOwnProperty.call(fs, k)) continue;
+    const v = fs[k];
+    const chip = el("div", {className:"fc " + fc(v)});
     chip.appendChild(el("span", {className:"fn"}, k.replace(/_/g," ")));
     chip.appendChild(el("span", {className:"fv"}, sgn(v)));
     fg.appendChild(chip);
@@ -595,46 +598,54 @@ function render(d) {
   macroCard.appendChild(fg);
   row1.appendChild(macroCard);
 
-  // Price Model Card
+  // Price Model
   const priceCard = card("Price Model");
-  priceCard.appendChild(el("div", {className:`dirb ${dc(pm.direction)}`}, esc(pm.direction)));
+  priceCard.appendChild(el("div", {className:"dirb " + dc(pm.direction)},
+    String(pm.direction)));
   priceCard.appendChild(el("div", {style:{color:"var(--muted)",fontSize:"11px",marginBottom:"4px"}},
     "Probability: " + (pm.probability * 100).toFixed(1) + "%"));
-  priceCard.appendChild(bar(pm.probability * 100, dc(pm.direction)==="bull" ? "var(--bull)" : "var(--bear)"));
-  priceCard.appendChild(kv("Model confidence",
+  priceCard.appendChild(barEl(pm.probability * 100, dc(pm.direction)));
+  priceCard.appendChild(kv("Confidence",
     pm.probability > 0.55 || pm.probability < 0.45 ? "Moderate" : "Low"));
   row1.appendChild(priceCard);
 
-  // Vol Forecast Card
+  // Vol Forecast
   const volCard = card("Vol Forecast");
   volCard.appendChild(el("div", {className:"dirb", style:{color:"var(--blue)"}},
     vf.weekly_vol_pct.toFixed(1) + "%"));
   volCard.appendChild(el("div", {style:{color:"var(--muted)",fontSize:"11px",marginBottom:"8px"}},
     "Weekly realized vol estimate"));
   volCard.appendChild(kv("Percentile", vf.percentile + "th"));
-  volCard.appendChild(kv("Label", esc(vf.label)));
-  volCard.appendChild(bar(vf.percentile, "var(--blue)"));
+  volCard.appendChild(kv("Label", String(vf.label)));
+  const volBar = el("div", {className:"pbar-w"});
+  const volFill = el("div", {className:"pbar"});
+  volFill.style.width = Math.max(3, vf.percentile) + "%";
+  volFill.style.background = "linear-gradient(90deg,rgba(129,140,248,.3),var(--blue))";
+  volFill.style.boxShadow = "0 0 7px var(--blue-glow)";
+  volBar.appendChild(volFill);
+  volCard.appendChild(volBar);
   row1.appendChild(volCard);
   app.appendChild(row1);
 
-  // ── ROW 2: COT + VIX + KEY LEVELS
+  // ── ROW 2 ──
+  app.appendChild(secLbl("Market Structure"));
   const row2 = el("div", {className:"g3"});
 
-  // COT Card
-  const cotCard = card("COT Positioning  ·  as of " + esc(cot.as_of || "—"));
+  // COT
+  const cotCard = card("COT Positioning · " + String(cot.as_of || "—"));
   const pctile = cot.nq_lev_pctile;
   const pColor = pctile > 0.8 ? "var(--bull)" : pctile < 0.2 ? "var(--bear)" : "var(--text)";
   cotCard.appendChild(kv("NQ Lev Funds",
-    esc(cot.lev_label) + " (" + (pctile * 100).toFixed(0) + "th pctile)",
+    String(cot.lev_label) + " (" + (pctile * 100).toFixed(0) + "th)",
     {color: pColor}));
   const pbw = el("div", {className:"pb-w"});
-  const pbf = el("div", {className:"pb-f", style:{
-    width: (pctile * 100) + "%",
-    background: pctile > 0.8 ? "var(--bull)" : pctile < 0.2 ? "var(--bear)" : "var(--blue)"
-  }});
-  const pm1 = el("div", {className:"pb-m", style:{left:"20%"}});
-  const pm2 = el("div", {className:"pb-m", style:{left:"80%"}});
-  pbw.appendChild(pbf); pbw.appendChild(pm1); pbw.appendChild(pm2);
+  const pbf = el("div", {className:"pb-f"});
+  pbf.style.width = (pctile * 100) + "%";
+  pbf.style.background = pctile > 0.8 ? "var(--bull)" : pctile < 0.2 ? "var(--bear)" : "var(--blue)";
+  pbw.appendChild(pbf);
+  const pm1 = el("div", {className:"pb-m"}); pm1.style.left = "20%";
+  const pm2 = el("div", {className:"pb-m"}); pm2.style.left = "80%";
+  pbw.appendChild(pm1); pbw.appendChild(pm2);
   cotCard.appendChild(pbw);
   const wow = cot.nq_lev_wow;
   cotCard.appendChild(kv("NQ Lev WoW",
@@ -644,31 +655,27 @@ function render(d) {
   cotCard.appendChild(kv("ES Asset Mgr Net",
     (amn >= 0 ? "+" : "") + (amn * 100).toFixed(1) + "% OI",
     {color: amn >= 0 ? "var(--bull)" : "var(--bear)"}));
-  const interp = el("div", {style:{
-    marginTop:"10px", padding:"8px",
-    background:"rgba(167,100,255,0.07)",
-    border:"1px solid rgba(167,100,255,0.12)",
-    borderRadius:"7px", fontSize:"11px", color:"var(--muted)"
-  }}, esc(cot.positioning_interpretation || "—"));
-  cotCard.appendChild(interp);
+  cotCard.appendChild(el("div", {className:"interp"},
+    String(cot.positioning_interpretation || "—")));
   row2.appendChild(cotCard);
 
-  // VIX Term Structure Card
+  // VIX Term Structure
   const vtsCard = card("VIX Term Structure");
-  vtsCard.appendChild(el("div", {className:`vbadge ${vts.structure==="BACKWARDATION"?"back":"cont"}`},
-    esc(vts.structure)));
+  vtsCard.appendChild(el("div",
+    {className:"vbadge " + (vts.structure === "BACKWARDATION" ? "back" : "cont")},
+    String(vts.structure)));
   vtsCard.appendChild(kv("VIX / VIX3M", vts.vix_ratio.toFixed(3)));
-  vtsCard.appendChild(kv("Mood", esc(vts.mood.toUpperCase()),
+  vtsCard.appendChild(kv("Mood", String(vts.mood).toUpperCase(),
     {color: vts.mood === "stress" ? "var(--bear)" : "var(--bull)"}));
   vtsCard.appendChild(kv("VVIX", vts.vvix.toFixed(1)));
   const rw = vts.ratio_wow;
   vtsCard.appendChild(kv("Ratio WoW",
-    (rw >= 0 ? "+" : "") + rw.toFixed(3) + " (" + esc(vts.direction) + " → " + esc(vts.bias) + ")",
+    (rw >= 0 ? "+" : "") + rw.toFixed(3) + " → " + String(vts.bias),
     {color: rw > 0 ? "var(--bear)" : "var(--bull)"}));
   row2.appendChild(vtsCard);
 
-  // Key Levels Card
-  const lvlCard = card("Key Levels  (NQ)");
+  // Key Levels
+  const lvlCard = card("Key Levels · NQ");
   const tbl = el("table", {className:"lvl-tbl"});
   const levels = [
     ["4-Week High",      "4w_high",  true],
@@ -680,80 +687,90 @@ function render(d) {
     ["ATR 5-day",        "atr_5d",   false],
     ["ATR 20-day",       "atr_20d",  false],
   ];
-  for (const [name, key, highlight] of levels) {
+  for (let i = 0; i < levels.length; i++) {
+    const name = levels[i][0], key = levels[i][1], hi = levels[i][2];
     const tr = el("tr");
     tr.appendChild(el("td", {className:"ln"}, name));
     const val = kl[key];
-    const td = el("td", {className:"lv" + (highlight ? " hi" : "")},
-      val != null ? val.toFixed(2) : "—");
-    tr.appendChild(td);
+    tr.appendChild(el("td", {className:"lv" + (hi ? " hi" : "")},
+      val != null ? val.toFixed(2) : "—"));
     tbl.appendChild(tr);
   }
   lvlCard.appendChild(tbl);
   row2.appendChild(lvlCard);
   app.appendChild(row2);
 
-  // ── ACCURACY BANNER
+  // ── ACCURACY BANNER ──
+  app.appendChild(secLbl("Model Performance — Feb to May 2026"));
   const accData = [
-    ["Directional Accuracy", "76.9%",  "13 tradeable calls (Feb–May 2026)", "var(--bull)"],
-    ["RISK-ON Accuracy",     "100%",   "Perfect in full RISK-ON regime",     "var(--bull)"],
-    ["LEAN BULL Accuracy",   "5 / 5",  "All LEAN BULL calls correct",        "var(--bull)"],
-    ["Misses",               "2",      "April 2026 tariff catalyst",         "var(--mixed)"],
+    ["Directional Accuracy", "76.9%",  "13 tradeable calls",          "var(--bull)"],
+    ["RISK-ON Accuracy",     "100%",   "Perfect in full risk-on",      "var(--bull)"],
+    ["LEAN BULL Accuracy",   "5 / 5",  "All lean bull calls correct",  "var(--bull)"],
+    ["Misses",               "2",      "April 2026 tariff catalyst",   "var(--mixed)"],
   ];
   const acc = el("div", {className:"acc"});
-  acc.style.animationDelay = (_ci++ * 0.11) + "s";
-  for (const [lbl, val, sub, color] of accData) {
+  acc.style.animationDelay = (_ci++ * 0.1) + "s";
+  for (let i = 0; i < accData.length; i++) {
+    const lbl = accData[i][0], val = accData[i][1],
+          sub = accData[i][2], color = accData[i][3];
     const as = el("div", {className:"as"});
     as.appendChild(el("div", {className:"al"}, lbl));
-    as.appendChild(el("div", {className:"av", style:{color}}, val));
+    as.appendChild(el("div", {className:"av", style:{color:color}}, val));
     as.appendChild(el("div", {className:"as2"}, sub));
     acc.appendChild(as);
   }
   app.appendChild(acc);
 
-  // ── HISTORY TABLE
-  const hw = el("div", {className:"hist-wrap"});
-  hw.appendChild(el("div", {className:"hist-title"}, "Blind Prediction History — Feb to May 2026"));
-  const hcard = el("div", {className:"card", style:{padding:"0", overflow:"hidden"}});
-  hcard.style.animationDelay = (_ci++ * 0.11) + "s";
+  // ── HISTORY TABLE ──
+  app.appendChild(secLbl("Blind Prediction History"));
+  const hcard = el("div", {className:"card"});
+  hcard.style.padding = "0";
+  hcard.style.overflow = "hidden";
+  hcard.style.animationDelay = (_ci++ * 0.1) + "s";
   const htbl = el("table", {className:"hist"});
   const thead = el("thead");
   const htr = el("tr");
-  for (const h of ["Week of","Regime","Score","Price Dir","Prob","Vol Est","Confluence"]) {
-    htr.appendChild(el("th", {}, h));
+  const headers = ["Week Of","Regime","Score","Price Dir","Prob","Vol Est","Confluence"];
+  for (let i = 0; i < headers.length; i++) {
+    htr.appendChild(el("th", {}, headers[i]));
   }
   thead.appendChild(htr);
   htbl.appendChild(thead);
   const tbody = el("tbody");
-  for (const h of HIST) {
+  for (let i = 0; i < HIST.length; i++) {
+    const h = HIST[i];
     const tr = el("tr");
     tr.appendChild(el("td", {}, h.date));
-    const rtd = el("td"); rtd.appendChild(tag(h.regime, cc(h.regime))); tr.appendChild(rtd);
-    tr.appendChild(el("td", {style:{color: h.score>0?"var(--bull)":h.score<0?"var(--bear)":"var(--muted)"}}, sgn(h.score)));
-    const dtd = el("td"); dtd.appendChild(tag(h.dir, dc(h.dir))); tr.appendChild(dtd);
+    const rtd = el("td"); rtd.appendChild(tagEl(h.regime, cc(h.regime))); tr.appendChild(rtd);
+    const scoreColor = h.score > 0 ? "var(--bull)" : h.score < 0 ? "var(--bear)" : "var(--muted)";
+    tr.appendChild(el("td", {style:{color:scoreColor}}, sgn(h.score)));
+    const dtd = el("td"); dtd.appendChild(tagEl(h.dir, dc(h.dir))); tr.appendChild(dtd);
     tr.appendChild(el("td", {style:{color:"var(--muted)"}}, pct(h.prob)));
     tr.appendChild(el("td", {style:{color:"var(--muted)"}}, pct(h.vol, 2)));
-    const ctd = el("td"); ctd.appendChild(tag(h.conf, cc(h.conf))); tr.appendChild(ctd);
+    const ctd = el("td"); ctd.appendChild(tagEl(h.conf, cc(h.conf))); tr.appendChild(ctd);
     tbody.appendChild(tr);
   }
   htbl.appendChild(tbody);
   hcard.appendChild(htbl);
-  hw.appendChild(hcard);
-  app.appendChild(hw);
+  app.appendChild(hcard);
 }
 
-// ── INIT ──────────────────────────────────────────────────────
+// ── INIT ──────────────────────────────────────────
 fetch("bias_output.json")
-  .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+  .then(function(r) {
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  })
   .then(render)
-  .catch(err => {
+  .catch(function(err) {
     const app = document.getElementById("app");
-    app.innerHTML = "";
+    clearEl(app);
     const d = el("div", {className:"err"});
     d.appendChild(el("p", {}, "Could not load bias_output.json"));
-    d.appendChild(el("p", {style:{marginTop:"8px",fontSize:"11px",color:"var(--muted)"}}, err.message));
+    d.appendChild(el("p", {style:{marginTop:"8px",fontSize:"11px",color:"var(--muted)"}},
+      err.message));
     d.appendChild(el("p", {style:{marginTop:"4px",fontSize:"11px",color:"var(--muted)"}},
-      "Make sure bias_output.json is in the same directory as index.html."));
+      "Ensure bias_output.json is in the same directory as index.html."));
     app.appendChild(d);
   });
 </script>
