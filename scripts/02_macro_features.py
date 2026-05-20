@@ -72,13 +72,24 @@ vix_raw = fetch_vix_from_csv()
 print(f"  vix: {len(vix_raw)} obs  "
       f"{vix_raw.index.min().date()} → {vix_raw.index.max().date()}")
 
-print("\nPulling DXY from yfinance...")
+print("\nPulling DXY, VIX3M, VVIX from yfinance...")
 dxy = yf.download("DX-Y.NYB", start="2014-01-01", end="2026-01-31",
                   interval="1d", progress=False)["Close"]
 dxy.index = pd.to_datetime(dxy.index)
 dxy.name  = "dxy"
 print(f"  dxy: {len(dxy)} obs  "
       f"{dxy.index.min().date()} → {dxy.index.max().date()}")
+
+vix3m_raw = yf.download("^VIX3M", start="2014-01-01", end="2026-01-31",
+                        interval="1d", progress=False)["Close"].squeeze()
+vix3m_raw.index = pd.to_datetime(vix3m_raw.index)
+vvix_raw  = yf.download("^VVIX",  start="2014-01-01", end="2026-01-31",
+                        interval="1d", progress=False)["Close"].squeeze()
+vvix_raw.index = pd.to_datetime(vvix_raw.index)
+print(f"  vix3m: {len(vix3m_raw)} obs  "
+      f"{vix3m_raw.index.min().date()} → {vix3m_raw.index.max().date()}")
+print(f"  vvix:  {len(vvix_raw)} obs  "
+      f"{vvix_raw.index.min().date()} → {vvix_raw.index.max().date()}")
 
 # ── BUILD WEEKLY TABLE ────────────────────────────────────────
 print("\nBuilding weekly table...")
@@ -101,6 +112,8 @@ w_10y   = to_weekly_mean(raw["us10y"])
 w_2y    = to_weekly_mean(raw["us2y"])
 w_dxy   = to_weekly_mean(dxy.squeeze())
 w_vix   = to_weekly_mean(vix_raw)
+w_vix3m = to_weekly_mean(vix3m_raw)
+w_vvix  = to_weekly_mean(vvix_raw)
 
 # Net liquidity = Fed assets - RRP - TGA
 net_liq = w_walcl - w_rrp - w_tga
@@ -112,6 +125,8 @@ macro = pd.DataFrame({
     "tga":     w_tga,
     "net_liq": net_liq,
     "vix":     w_vix,
+    "vix3m":   w_vix3m,
+    "vvix":    w_vvix,
     "us10y":   w_10y,
     "us2y":    w_2y,
     "dxy":     w_dxy,
@@ -120,10 +135,13 @@ macro = pd.DataFrame({
 # Yield curve: 10Y - 2Y (2Y10Y spread)
 macro["yield_curve"] = macro["us10y"] - macro["us2y"]
 
+# VIX term structure: ratio > 1.0 = backwardation (stress), < 1.0 = contango (calm)
+macro["vix_ratio"] = macro["vix"] / macro["vix3m"]
+
 # ── COMPUTE CHANGES ───────────────────────────────────────────
 # WoW = week over week, 4W = 4 week change
 # These are the actual model inputs
-for col in ["net_liq", "vix", "us10y", "dxy", "yield_curve"]:
+for col in ["net_liq", "vix", "us10y", "dxy", "yield_curve", "vix_ratio"]:
     macro[f"{col}_wow"] = macro[col].diff(1)
     macro[f"{col}_4w"]  = macro[col].diff(4)
 
@@ -144,6 +162,6 @@ print(f"Shape: {macro.shape}  "
       f"({macro.index.min().date()} → {macro.index.max().date()})")
 print(f"\nExpected ~620 weeks. Got {len(macro)}.")
 print("\nSample (last 5 weeks):")
-print(macro[["net_liq", "net_liq_wow", "net_liq_4w",
-             "vix", "us10y", "dxy", "yield_curve",
-             "yield_curve_wow", "yield_curve_4w"]].tail())
+print(macro[["net_liq", "net_liq_wow",
+             "vix", "vix3m", "vix_ratio", "vix_ratio_wow",
+             "vvix", "yield_curve", "yield_curve_wow"]].tail())

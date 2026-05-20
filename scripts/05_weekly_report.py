@@ -80,10 +80,14 @@ tga   = fred_fetch("WTREGEN") / 1000
 us10y = fred_fetch("DGS10")
 us2y  = fred_fetch("DGS2")
 
-dxy = yf.download("DX-Y.NYB", start=macro_start, end=today,
-                  interval="1d", progress=False)["Close"].squeeze()
-vix = yf.download("^VIX",     start=macro_start, end=today,
-                  interval="1d", progress=False)["Close"].squeeze()
+dxy   = yf.download("DX-Y.NYB", start=macro_start, end=today,
+                    interval="1d", progress=False)["Close"].squeeze()
+vix   = yf.download("^VIX",    start=macro_start, end=today,
+                    interval="1d", progress=False)["Close"].squeeze()
+vix3m = yf.download("^VIX3M",  start=macro_start, end=today,
+                    interval="1d", progress=False)["Close"].squeeze()
+vvix  = yf.download("^VVIX",   start=macro_start, end=today,
+                    interval="1d", progress=False)["Close"].squeeze()
 
 # ── BUILD WEEKLY FEATURES ─────────────────────────────────────
 print("\nBuilding features...")
@@ -96,6 +100,8 @@ net_liq = to_weekly_last(walcl) - to_weekly_mean(rrp) - to_weekly_last(tga)
 macro = pd.DataFrame({
     "net_liq": net_liq,
     "vix":     to_weekly_mean(vix),
+    "vix3m":   to_weekly_mean(vix3m),
+    "vvix":    to_weekly_mean(vvix),
     "us10y":   to_weekly_mean(us10y),
     "us2y":    to_weekly_mean(us2y),
     "dxy":     to_weekly_mean(dxy),
@@ -105,10 +111,16 @@ macro = pd.DataFrame({
 }).ffill(limit=1).dropna()
 
 macro["yield_curve"] = macro["us10y"] - macro["us2y"]
+macro["vix_ratio"]   = macro["vix"] / macro["vix3m"]
 
-for col in ["net_liq", "vix", "us10y", "dxy", "yield_curve"]:
+for col in ["net_liq", "vix", "us10y", "dxy", "yield_curve", "vix_ratio"]:
     macro[f"{col}_wow"] = macro[col].diff(1)
     macro[f"{col}_4w"]  = macro[col].diff(4)
+
+# Unshifted current-week values for VIX term structure display
+_live_vix_ratio     = macro["vix_ratio"].iloc[-1]
+_live_vvix          = macro["vvix"].iloc[-1]
+_live_vix_ratio_wow = macro["vix_ratio_wow"].iloc[-1]
 
 feature_cols = [c for c in macro.columns if c not in ["walcl","rrp","tga","us2y"]]
 macro[feature_cols] = macro[feature_cols].shift(1)
@@ -264,8 +276,8 @@ hist = pd.read_csv(os.path.join(PROC_DIR, "model_dataset_enriched.csv"),
                    index_col=0, parse_dates=True)
 MACRO_COLS = ["net_liq_wow", "net_liq_4w", "vix_wow", "vix_4w",
               "us10y_wow", "us10y_4w", "dxy_wow", "dxy_4w",
-              "yield_curve_wow", "yield_curve_4w"]
-hist_vals = hist[MACRO_COLS].dropna()
+              "yield_curve_wow", "yield_curve_4w", "vix_ratio_wow"]
+hist_vals = hist[[c for c in MACRO_COLS if c in hist.columns]].dropna()
 
 def pct_rank(val, hist_series, as_of):
     sliced = hist_series[hist_series.index <= as_of]
@@ -288,6 +300,7 @@ def score_macro_live(row, as_of):
         "us10y_4w":    1 if p.get("us10y_4w",0.5)   <0.35 else(-1 if p.get("us10y_4w",0.5)   >0.70 else 0),
         "yield_curve_wow": 1 if p.get("yield_curve_wow",0.5)>0.65 else(-1 if p.get("yield_curve_wow",0.5)<0.35 else 0),
         "yield_curve_4w":  1 if p.get("yield_curve_4w",0.5) >0.65 else(-1 if p.get("yield_curve_4w",0.5) <0.35 else 0),
+        "vix_ratio_wow":   1 if p.get("vix_ratio_wow",0.5)  <0.35 else(-1 if p.get("vix_ratio_wow",0.5)  >0.65 else 0),
     }
     return sum(s.values()), s
 
@@ -329,7 +342,7 @@ def print_week(date, row, lv, save_list=None):
     print(f"  │ Period:        {week_start} → {week_end}")
     print(f"  │ Generated:     {datetime.today().strftime('%Y-%m-%d %H:%M')}")
     print(f"  │")
-    print(f"  │ MACRO REGIME:  {regime}  (score: {macro_score:+.0f}/10)")
+    print(f"  │ MACRO REGIME:  {regime}  (score: {macro_score:+.0f}/11)")
     if bull_f: print(f"  │   Bullish inputs: {', '.join(bull_f)}")
     if bear_f: print(f"  │   Bearish inputs: {', '.join(bear_f)}")
     print(f"  │")
@@ -371,6 +384,28 @@ def print_week(date, row, lv, save_list=None):
     print(f"  │   ES Asset Mgr:    {es_am_net:+.1%} OI {am_dir} ({am_desc})")
     print(f"  │   ► Positioning:   {pos_interp}")
     print(f"  │")
+
+    # VIX term structure display — use live unshifted values in LIVE_MODE,
+    # shifted (model-input) values for historical weeks
+    if LIVE_MODE:
+        ts_ratio = _live_vix_ratio
+        ts_vvix  = _live_vvix
+        ts_wow   = _live_vix_ratio_wow
+    else:
+        ts_ratio = row.get("vix_ratio", float("nan"))
+        ts_vvix  = row.get("vvix", float("nan"))
+        ts_wow   = row.get("vix_ratio_wow", float("nan"))
+
+    if not (np.isnan(ts_ratio) if isinstance(ts_ratio, float) else pd.isna(ts_ratio)):
+        ts_struct = "BACKWARDATION" if ts_ratio > 1.0 else "CONTANGO"
+        ts_mood   = "stress"        if ts_ratio > 1.0 else "calm"
+        ts_dir    = "rising"        if ts_wow > 0     else "falling"
+        ts_bias   = "bearish"       if ts_wow > 0     else "bullish"
+        print(f"  │ VIX TERM STRUCTURE:")
+        print(f"  │   VIX/VIX3M ratio:  {ts_ratio:.3f}  [{ts_struct} — {ts_mood}]")
+        print(f"  │   VVIX:             {ts_vvix:.1f}")
+        print(f"  │   Ratio WoW:        {ts_wow:+.3f}  ({ts_dir} → {ts_bias})")
+        print(f"  │")
 
     if lv is not None and not pd.isna(lv).all():
         print(f"  │ KEY LEVELS (NQ):")

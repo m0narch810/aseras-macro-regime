@@ -52,7 +52,7 @@ print("="*60)
 
 MACRO_COLS = ["net_liq_wow", "net_liq_4w", "vix_wow", "vix_4w",
               "us10y_wow", "us10y_4w", "dxy_wow", "dxy_4w",
-              "yield_curve_wow", "yield_curve_4w"]
+              "yield_curve_wow", "yield_curve_4w", "vix_ratio_wow"]
 
 # Compute percentile ranks over expanding window
 # (only uses data available up to that point — no leakage)
@@ -88,6 +88,9 @@ def score_macro(row):
     # Low percentile  = curve flattening/inverting = bearish
     scores["yield_curve_wow"] = 1 if row["yield_curve_wow"] > 0.65 else (-1 if row["yield_curve_wow"] < 0.35 else 0)
     scores["yield_curve_4w"]  = 1 if row["yield_curve_4w"]  > 0.65 else (-1 if row["yield_curve_4w"]  < 0.35 else 0)
+
+    # VIX term structure: ratio rising = backwardation = stress = bearish (inverted like VIX)
+    scores["vix_ratio_wow"] = 1 if row["vix_ratio_wow"] < 0.35 else (-1 if row["vix_ratio_wow"] > 0.65 else 0)
 
     total = sum(scores.values())
     return total, scores
@@ -369,7 +372,7 @@ for date in last_dates:
     regime = df.loc[date, "regime"] if date in df.index else "N/A"
     m_score = df.loc[date, "macro_score"] if date in df.index else 0
     detail = macro_details[df.index.get_loc(date)] if date in df.index else {}
-    print(f"  | MACRO REGIME:  {regime}  (score: {m_score:+.0f}/10)")
+    print(f"  | MACRO REGIME:  {regime}  (score: {m_score:+.0f}/11)")
     if detail:
         bull_factors = [k for k, v in detail.items() if v > 0]
         bear_factors = [k for k, v in detail.items() if v < 0]
