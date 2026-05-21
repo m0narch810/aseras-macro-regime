@@ -134,6 +134,43 @@ header {
 }
 @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.18; } }
 
+/* ── TABS ────────────────────────────────────────── */
+.tab-bar {
+  display: flex;
+  padding: 0 32px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  background: rgba(6,6,8,0.45);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  position: sticky;
+  top: 51px;
+  z-index: 99;
+}
+.tab-btn {
+  font-family: 'Syne', sans-serif;
+  font-size: 8.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ghost);
+  padding: 11px 18px 10px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-bottom: 1.5px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s, border-color 0.15s;
+  outline: none;
+}
+.tab-btn:hover { color: var(--muted); }
+.tab-btn.active {
+  color: var(--text);
+  border-bottom-color: rgba(200,208,220,0.55);
+}
+
+/* ── TAB PANE ────────────────────────────────────── */
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
 /* ── MAIN ────────────────────────────────────────── */
 main {
   max-width: 1160px; margin: 0 auto;
@@ -414,6 +451,127 @@ footer .alph { color: rgba(255,255,255,0.55); }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16); border-radius: 1px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.28); }
 
+/* ── LEVELS TAB ──────────────────────────────────── */
+.lvls-header {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 16px 22px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  opacity: 0;
+  animation: fadeUp 0.5s cubic-bezier(0.16,1,0.3,1) forwards;
+}
+.lvls-stat {
+  flex: 1;
+  min-width: 80px;
+  padding: 0 18px;
+}
+.lvls-stat:first-child { padding-left: 0; }
+.lvls-stat:last-child  { padding-right: 0; }
+.lvls-stat + .lvls-stat { border-left: 1px solid rgba(255,255,255,0.07); }
+.lvls-stat-lbl {
+  font-family: 'Syne', sans-serif;
+  font-size: 7px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ghost);
+  margin-bottom: 5px;
+}
+.lvls-stat-val {
+  font-family: 'Syne', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  line-height: 1.2;
+}
+.lvls-regime {
+  font-family: 'Syne', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-radius: 2px;
+  padding: 2px 10px;
+  border: 1px solid transparent;
+  display: inline-block;
+}
+.lvls-regime.bull  { background: var(--bull-dim);  border-color: var(--bull-b);  color: var(--bull); }
+.lvls-regime.bear  { background: var(--bear-dim);  border-color: var(--bear-b);  color: var(--bear); }
+.lvls-regime.mixed { background: var(--mixed-dim); border-color: var(--mixed-b); color: var(--mixed); }
+
+.lvl-panel-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 7.5px; font-weight: 600;
+  letter-spacing: 0.24em; text-transform: uppercase;
+  color: var(--ghost);
+  padding: 13px 14px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.055);
+}
+
+.lvl-tbl2 { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+.lvl-tbl2 th {
+  font-family: 'Syne', sans-serif;
+  font-size: 6.5px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ghost); padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-weight: 600; text-align: left; white-space: nowrap;
+}
+.lvl-tbl2 td {
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  white-space: nowrap;
+}
+.lvl-tbl2 tr:last-child td { border-bottom: none; }
+.lvl-tbl2 tr:hover td { background: rgba(255,255,255,0.018); }
+
+.lvl-full-tbl { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+.lvl-full-tbl th {
+  font-family: 'Syne', sans-serif;
+  font-size: 7px; letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--ghost); padding: 10px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  font-weight: 600; text-align: left; white-space: nowrap;
+  cursor: pointer; user-select: none;
+  transition: color 0.15s;
+}
+.lvl-full-tbl th:hover { color: var(--muted); }
+.lvl-full-tbl th.sort-asc::after  { content: ' \25b2'; font-size: 6px; opacity: 0.7; }
+.lvl-full-tbl th.sort-desc::after { content: ' \25bc'; font-size: 6px; opacity: 0.7; }
+.lvl-full-tbl td {
+  padding: 7px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  white-space: nowrap;
+  transition: background 0.12s;
+}
+.lvl-full-tbl tr:hover td { background: rgba(255,255,255,0.02); }
+.lvl-full-tbl tr:last-child td { border-bottom: none; }
+
+.type-tag {
+  display: inline-block; border-radius: 2px;
+  padding: 1px 6px;
+  font-family: 'Syne', sans-serif;
+  font-size: 7px; font-weight: 700;
+  letter-spacing: 0.05em;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.type-tag.bull  { background: var(--bull-dim);  border-color: var(--bull-b);  color: var(--bull); }
+.type-tag.bear  { background: var(--bear-dim);  border-color: var(--bear-b);  color: var(--bear); }
+.type-tag.mixed { background: var(--mixed-dim); border-color: var(--mixed-b); color: var(--mixed); }
+
+.lvl-await {
+  color: var(--ghost); text-align: center; padding: 80px;
+  font-family: 'Syne', sans-serif; letter-spacing: 0.26em;
+  font-size: 11px; text-transform: uppercase;
+}
+.lvl-empty {
+  padding: 18px 14px; color: var(--ghost);
+  font-size: 10px; font-style: italic;
+}
+
 </style>
 </head>
 <body>
@@ -430,7 +588,19 @@ footer .alph { color: rgba(255,255,255,0.55); }
     </div>
   </header>
 
-  <main id="app"><div class="loading">Initializing&hellip;</div></main>
+  <nav class="tab-bar">
+    <button class="tab-btn active" data-tab="bias" onclick="switchTab('bias')">Bias</button>
+    <button class="tab-btn" data-tab="levels" onclick="switchTab('levels')">Levels</button>
+  </nav>
+
+  <main>
+    <div id="pane-bias" class="tab-pane active">
+      <div id="app"><div class="loading">Initializing&hellip;</div></div>
+    </div>
+    <div id="pane-levels" class="tab-pane">
+      <div id="levels-app"><div class="lvl-await">Awaiting data&hellip;</div></div>
+    </div>
+  </main>
 
   <footer>
     NQ &middot; ES Equity Index Futures &nbsp;&middot;&nbsp; Weekly timeframe only &nbsp;&middot;&nbsp; Not financial advice
@@ -735,6 +905,254 @@ function render(d) {
   app.appendChild(hcard);
 }
 
+// ── TAB SWITCHING ─────────────────────────────────
+function switchTab(name) {
+  const btns  = document.querySelectorAll(".tab-btn");
+  const panes = document.querySelectorAll(".tab-pane");
+  btns.forEach(function(b)  { b.classList.toggle("active", b.getAttribute("data-tab") === name); });
+  panes.forEach(function(p) { p.classList.toggle("active", p.id === "pane-" + name); });
+}
+
+// ── LEVELS HELPERS ────────────────────────────────
+function regimeClass(r) {
+  if (!r) return "mixed";
+  const u = String(r).toUpperCase();
+  if (u.includes("CONTRACTION")) return "bull";
+  if (u.includes("EXPANSION"))   return "bear";
+  return "mixed";
+}
+
+function fmtGex(v) {
+  if (v == null || isNaN(v)) return "—";
+  const abs = Math.abs(v);
+  const s = v < 0 ? "-" : "+";
+  if (abs >= 1e9) return s + (abs / 1e9).toFixed(2) + "B";
+  if (abs >= 1e6) return s + (abs / 1e6).toFixed(0) + "M";
+  if (abs >= 1e3) return s + (abs / 1e3).toFixed(1) + "K";
+  return s + abs.toFixed(0);
+}
+
+function fmtDist(v) {
+  if (v == null || isNaN(v)) return "—";
+  return (v > 0 ? "+" : "") + Math.round(v);
+}
+
+function typeTagClass(net_gex) {
+  if (net_gex > 0) return "bear";
+  if (net_gex < 0) return "bull";
+  return "mixed";
+}
+
+// ── LEVELS SORT STATE ─────────────────────────────
+const lvlSort = { col: "score", dir: "desc" };
+let _lvlData = null;
+
+// ── BUILD LEVEL ROW ───────────────────────────────
+function makeLvlRow(lvl) {
+  const tr = el("tr");
+  const gexColor = lvl.net_gex > 0 ? "var(--bear)" : lvl.net_gex < 0 ? "var(--bull)" : "var(--muted)";
+  const vexColor = lvl.net_vex > 0 ? "var(--bear)" : lvl.net_vex < 0 ? "var(--bull)" : "var(--muted)";
+  const dist = lvl.dist_nq;
+  const distColor = dist > 0 ? "var(--bear)" : dist < 0 ? "var(--bull)" : "var(--muted)";
+
+  tr.appendChild(el("td", {style:{color:"var(--text)",fontWeight:"500"}},
+    lvl.strike_futures != null ? lvl.strike_futures.toFixed(1) : "—"));
+  tr.appendChild(el("td", {style:{color:"var(--muted)"}},
+    lvl.strike_etf != null ? lvl.strike_etf.toFixed(2) : "—"));
+  tr.appendChild(el("td", {style:{color:distColor}},
+    dist != null ? fmtDist(dist) : "—"));
+  tr.appendChild(el("td", {style:{color:"var(--accent)",fontWeight:"500"}},
+    lvl.score != null ? lvl.score.toFixed(1) : "—"));
+
+  const ttd = el("td");
+  ttd.appendChild(el("span", {className:"type-tag " + typeTagClass(lvl.net_gex)},
+    String(lvl.type || "—")));
+  tr.appendChild(ttd);
+
+  tr.appendChild(el("td", {style:{color:gexColor}}, fmtGex(lvl.net_gex)));
+  tr.appendChild(el("td", {style:{color:vexColor}}, fmtGex(lvl.net_vex)));
+  tr.appendChild(el("td", {style:{color:"var(--muted)"}},
+    lvl.total_oi != null ? lvl.total_oi.toLocaleString() : "—"));
+  return tr;
+}
+
+const LVL_COLS = [
+  {key:"strike_futures", lbl:"NQ Strike"},
+  {key:"strike_etf",     lbl:"QQQ Strike"},
+  {key:"dist_nq",        lbl:"Dist"},
+  {key:"score",          lbl:"Score"},
+  {key:"type",           lbl:"Type"},
+  {key:"net_gex",        lbl:"GEX"},
+  {key:"net_vex",        lbl:"VEX"},
+  {key:"total_oi",       lbl:"OI"},
+];
+
+function makePanelTable(levels) {
+  const tbl = el("table", {className:"lvl-tbl2"});
+  const thead = el("thead");
+  const htr = el("tr");
+  LVL_COLS.forEach(function(c) { htr.appendChild(el("th", {}, c.lbl)); });
+  thead.appendChild(htr);
+  tbl.appendChild(thead);
+  const tbody = el("tbody");
+  levels.forEach(function(lvl) { tbody.appendChild(makeLvlRow(lvl)); });
+  tbl.appendChild(tbody);
+  return tbl;
+}
+
+function renderAllTable(wrap, levels) {
+  clearEl(wrap);
+  const sorted = levels.slice().sort(function(a, b) {
+    const av = a[lvlSort.col], bv = b[lvlSort.col];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    const cmp = typeof av === "string" ? av.localeCompare(bv) : av - bv;
+    return lvlSort.dir === "desc" ? -cmp : cmp;
+  });
+
+  const outer = el("div", {className:"card", style:{padding:"0",overflow:"hidden",animationDelay:"0.15s"}});
+  const scroll = el("div", {style:{overflowX:"auto"}});
+  const tbl = el("table", {className:"lvl-full-tbl"});
+  const thead = el("thead");
+  const htr = el("tr");
+
+  LVL_COLS.forEach(function(col) {
+    const th = el("th", {}, col.lbl);
+    if (lvlSort.col === col.key) th.className = "sort-" + lvlSort.dir;
+    th.addEventListener("click", function() {
+      if (lvlSort.col === col.key) {
+        lvlSort.dir = lvlSort.dir === "desc" ? "asc" : "desc";
+      } else {
+        lvlSort.col = col.key;
+        lvlSort.dir = "desc";
+      }
+      renderAllTable(wrap, _lvlData.levels);
+    });
+    htr.appendChild(th);
+  });
+
+  thead.appendChild(htr);
+  tbl.appendChild(thead);
+  const tbody = el("tbody");
+  sorted.forEach(function(lvl) { tbody.appendChild(makeLvlRow(lvl)); });
+  tbl.appendChild(tbody);
+  scroll.appendChild(tbl);
+  outer.appendChild(scroll);
+  wrap.appendChild(outer);
+}
+
+// ── RENDER LEVELS ─────────────────────────────────
+function renderLevels(d) {
+  _lvlData = d;
+  const app = document.getElementById("levels-app");
+  clearEl(app);
+
+  const levels = d.levels || [];
+
+  // ── STATS HEADER ──
+  const hdr = el("div", {className:"lvls-header"});
+
+  function stat(lbl, valNode) {
+    const s = el("div", {className:"lvls-stat"});
+    s.appendChild(el("div", {className:"lvls-stat-lbl"}, lbl));
+    const v = el("div", {className:"lvls-stat-val"});
+    if (typeof valNode === "string") {
+      v.textContent = valNode;
+    } else {
+      v.appendChild(valNode);
+    }
+    s.appendChild(v);
+    return s;
+  }
+
+  hdr.appendChild(stat("Updated", d.updated || "—"));
+
+  hdr.appendChild(stat("NQ",
+    d.nq_price != null
+      ? d.nq_price.toLocaleString("en-US", {minimumFractionDigits:1, maximumFractionDigits:1})
+      : "—"));
+
+  hdr.appendChild(stat("QQQ",
+    d.qqq_price != null ? d.qqq_price.toFixed(2) : "—"));
+
+  const regBadge = el("span", {className:"lvls-regime " + regimeClass(d.regime)},
+    String(d.regime || "—"));
+  hdr.appendChild(stat("Regime", regBadge));
+
+  hdr.appendChild(stat("IV",
+    d.iv != null ? d.iv.toFixed(1) + "%" : "—"));
+
+  const rvColor = (d.rv_iv_ratio != null && d.rv_iv_ratio < 0.8)
+    ? "var(--bull)" : "var(--bear)";
+  const rvSpan = el("span", {style:{color:rvColor}},
+    d.rv_iv_ratio != null ? d.rv_iv_ratio.toFixed(3) : "—");
+  hdr.appendChild(stat("RV/IV", rvSpan));
+
+  hdr.appendChild(stat("HV21",
+    d.hv21 != null ? d.hv21.toFixed(1) + "%" : "—"));
+
+  app.appendChild(hdr);
+
+  // ── SUPPORT / RESISTANCE PANELS ──
+  const support    = levels.filter(function(l) { return l.net_gex <= 0; })
+                           .sort(function(a, b) { return b.score - a.score; });
+  const resistance = levels.filter(function(l) { return l.net_gex > 0; })
+                           .sort(function(a, b) { return b.score - a.score; });
+
+  app.appendChild(secLbl("Gamma Panels"));
+  const g2 = el("div", {className:"g2"});
+
+  function panelCard(titleColor, titleText, rows) {
+    const c = el("div", {className:"card", style:{padding:"0",overflow:"hidden",animationDelay:"0.05s"}});
+    const t = el("div", {className:"lvl-panel-title"});
+    t.appendChild(el("span", {style:{color:titleColor}},
+      titleColor === "var(--bull)" ? "▲ " : "▼ "));
+    t.appendChild(document.createTextNode(titleText));
+    c.appendChild(t);
+    if (rows.length === 0) {
+      c.appendChild(el("div", {className:"lvl-empty"}, "No levels"));
+    } else {
+      const scroll = el("div", {style:{overflowX:"auto"}});
+      scroll.appendChild(makePanelTable(rows));
+      c.appendChild(scroll);
+    }
+    return c;
+  }
+
+  g2.appendChild(panelCard("var(--bull)", "Support · Put Walls",   support));
+  g2.appendChild(panelCard("var(--bear)", "Resistance · Call Walls", resistance));
+  app.appendChild(g2);
+
+  // ── ALL LEVELS TABLE ──
+  app.appendChild(secLbl("All Levels"));
+  const allWrap = el("div");
+  app.appendChild(allWrap);
+  renderAllTable(allWrap, levels);
+}
+
+// ── LOAD LEVELS ───────────────────────────────────
+let levelsLoaded = false;
+
+function loadLevels() {
+  fetch("levels_data.json?_=" + Date.now())
+    .then(function(r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    })
+    .then(function(d) {
+      levelsLoaded = true;
+      renderLevels(d);
+    })
+    .catch(function() {
+      if (!levelsLoaded) {
+        const app = document.getElementById("levels-app");
+        clearEl(app);
+        app.appendChild(el("div", {className:"lvl-await"}, "Awaiting data…"));
+      }
+    });
+}
+
 // ── INIT ──────────────────────────────────────────
 fetch("bias_output.json")
   .then(function(r) {
@@ -752,6 +1170,9 @@ fetch("bias_output.json")
       "Ensure bias_output.json is in the same directory as index.html."));
     app.appendChild(d);
   });
+
+loadLevels();
+setInterval(loadLevels, 5 * 60 * 1000);
 </script>
 
 </body>
