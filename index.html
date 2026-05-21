@@ -934,7 +934,22 @@ function switchTab(name) {
   const panes = document.querySelectorAll(".tab-pane");
   btns.forEach(function(b)  { b.classList.toggle("active", b.getAttribute("data-tab") === name); });
   panes.forEach(function(p) { p.classList.toggle("active", p.id === "pane-" + name); });
+  window.location.hash = name;
 }
+
+function initHashRouting() {
+  const hash = window.location.hash.slice(1) || "bias";
+  if (hash === "bias" || hash === "levels") {
+    switchTab(hash);
+  }
+}
+
+window.addEventListener("hashchange", function() {
+  const hash = window.location.hash.slice(1) || "bias";
+  if (hash === "bias" || hash === "levels") {
+    switchTab(hash);
+  }
+});
 
 // ── LEVELS HELPERS ────────────────────────────────
 function regimeClass(r) {
@@ -1295,6 +1310,7 @@ fetch("bias_output.json")
   });
 
 loadLevels();
+initHashRouting();
 </script>
 
 </body>
