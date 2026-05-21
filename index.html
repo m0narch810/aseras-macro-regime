@@ -1133,8 +1133,8 @@ function renderLevels(d) {
   app.appendChild(hdr);
 
   const refreshBar = el("div", {className:"lvl-refresh-status"});
-  refreshBar.appendChild(el("div", {id:"levels-last-updated", className:"refresh-label"}, "Last updated 8:00am ET"));
-  refreshBar.appendChild(el("div", {id:"levels-refresh-countdown", className:"refresh-countdown"}, "Next refresh in 01:00:00"));
+  refreshBar.appendChild(el("div", {id:"levels-last-updated", className:"refresh-label"}, "Loading…"));
+  refreshBar.appendChild(el("div", {id:"levels-refresh-countdown", className:"refresh-countdown"}, ""));
   app.appendChild(refreshBar);
 
   // ── SUPPORT / RESISTANCE PANELS ──
@@ -1175,91 +1175,55 @@ function renderLevels(d) {
 }
 
 // ── LOAD LEVELS ───────────────────────────────────
-let levelsLoaded = false;
+let levelsLoaded         = false;
 let levelsRefreshTimeout = null;
 let levelsCountdownTimer = null;
-
-function getETTime() {
-  return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-}
-
-function getLastScheduledHour(etTime) {
-  const h = etTime.getHours();
-  const lastHour = new Date(etTime);
-  lastHour.setHours(h, 0, 0, 0);
-  return lastHour;
-}
-
-function getNextScheduledRefresh(etTime) {
-  const h = etTime.getHours();
-  const nextHour = new Date(etTime);
-  nextHour.setHours(h + 1, 0, 0, 0);
-  return nextHour;
-}
-
-function isScheduledHour(h) {
-  return h >= 8 && h < 16;
-}
+let lastLevelsUpdate     = null;
 
 function formatTimeET(date) {
   return date.toLocaleString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZone: 'America/New_York'
-  });
+    hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
+  }) + ' ET';
 }
 
 function formatDuration(ms) {
   if (ms <= 0) return "00:00";
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const mins = Math.floor((totalSeconds % 3600) / 60);
-  const secs = totalSeconds % 60;
-  if (hours > 0) {
-    return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  }
-  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  const s    = Math.floor(ms / 1000);
+  const mins = Math.floor(s / 60);
+  const secs = s % 60;
+  return String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+}
+
+function getNextFiveMinuteMark() {
+  const now  = new Date();
+  const next = new Date(now);
+  const m    = next.getMinutes();
+  const nm   = Math.ceil((m * 60 + next.getSeconds() + 1) / 300) * 300;
+  next.setMinutes(0, nm, 0);
+  return next;
 }
 
 function updateLevelsStatus() {
-  const el = document.getElementById("levels-refresh-countdown");
-  if (!el) return;
+  const countdownEl = document.getElementById("levels-refresh-countdown");
+  const updatedEl   = document.getElementById("levels-last-updated");
+  if (!countdownEl) return;
 
-  const now = getETTime();
-  const hour = now.getHours();
+  const remaining = getNextFiveMinuteMark() - Date.now();
+  countdownEl.textContent = "Next refresh in " + formatDuration(remaining);
+  countdownEl.style.color = "var(--text)";
 
-  if (!isScheduledHour(hour)) {
-    el.textContent = "Data offline (resumes at 8am ET)";
-    el.style.color = "var(--ghost)";
-    return;
+  if (updatedEl && lastLevelsUpdate) {
+    updatedEl.textContent = "Last updated " + formatTimeET(lastLevelsUpdate);
   }
-
-  const lastHour = getLastScheduledHour(now);
-  const nextHour = getNextScheduledRefresh(now);
-  const remaining = nextHour - now;
-
-  const statusEl = document.getElementById("levels-last-updated");
-  if (statusEl) {
-    statusEl.textContent = "Last updated " + formatTimeET(lastHour) + " ET";
-  }
-
-  el.textContent = `Next refresh in ${formatDuration(remaining)}`;
-  el.style.color = "var(--text)";
 }
 
 function scheduleNextRefresh() {
-  const now = getETTime();
-  const nextHour = getNextScheduledRefresh(now);
-  const msUntilRefresh = nextHour - now;
-
   if (levelsRefreshTimeout) clearTimeout(levelsRefreshTimeout);
+  const ms = getNextFiveMinuteMark() - Date.now();
   levelsRefreshTimeout = setTimeout(function() {
-    const checkHour = getETTime().getHours();
-    if (isScheduledHour(checkHour)) {
-      loadLevels();
-    }
+    loadLevels();
     scheduleNextRefresh();
-  }, msUntilRefresh);
+  }, ms);
 }
 
 function startCountdownTimer() {
@@ -1275,7 +1239,8 @@ function loadLevels() {
       return r.json();
     })
     .then(function(d) {
-      levelsLoaded = true;
+      levelsLoaded     = true;
+      lastLevelsUpdate = new Date();
       renderLevels(d);
       startCountdownTimer();
       scheduleNextRefresh();
@@ -1290,8 +1255,6 @@ function loadLevels() {
       scheduleNextRefresh();
     });
 }
-
-setInterval(loadLevels, 5 * 60 * 1000);
 
 // ── INIT ──────────────────────────────────────────
 fetch("bias_output.json")
