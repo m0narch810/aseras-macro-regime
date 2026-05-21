@@ -22,7 +22,7 @@ import json
 # ============================================================
 
 COOKIES = {
-    'ff_session': 'j_g_U67Ox9np5aXxK5YKHkVnQt41_RnyUEtmo7Bw7q0',
+    'ff_session': os.environ.get('FF_SESSION', 'j_g_U67Ox9np5aXxK5YKHkVnQt41_RnyUEtmo7Bw7q0'),
 }
 
 HEADERS = {
@@ -69,72 +69,33 @@ def fetch_futures_levels(session, symbol=SYMBOL, exp=None):
     return r.json()
 
 
-def fetch_cone(session, symbol=SYMBOL):
-    """
-    Vol cone: percentile distribution of HV across lookback periods.
-    Returns current HV5/10/21/63 and their percentile ranks.
-    """
-    url = f"{BASE_URL}/vol/cone?symbol={symbol}"
-    r = session.get(url, timeout=15)
-    r.raise_for_status()
-    data = r.json()
-
-    cone = data.get('cone', {})
-    return {
-        'hv5':    cone.get('5',  {}).get('current', 17.0),
-        'hv10':   cone.get('10', {}).get('current', 18.0),
-        'hv21':   cone.get('21', {}).get('current', 17.0),
-        'hv63':   cone.get('63', {}).get('current', 19.0),
-        'rank21': cone.get('21', {}).get('pct_rank', 50.0),
-    }
-
-
-def fetch_realized(session, symbol=SYMBOL):
-    """
-    Realized vol endpoint — contains current_iv and rv_iv_ratio.
-    """
-    url = f"{BASE_URL}/vol/realized?symbol={symbol}"
-    r = session.get(url, timeout=15)
-    r.raise_for_status()
-    return r.json()
-
-
 def get_vol_context(session):
     """
-    Combine cone + realized into a single vol context dict.
-    Falls back gracefully if either endpoint fails.
+    Fetch vol context from /api/vol/realized.
+    Returns current_iv, rv_iv_ratio, hv5/10/21/63.
+    /api/cone is 404. /api/vol/cone has no IV. /api/vol/realized has everything.
     """
     ctx = {
-        'hv5':        17.0,
-        'hv10':       18.0,
-        'hv21':       17.0,
-        'hv63':       19.0,
-        'rank21':     50.0,
-        'current_iv': 37.0,
-        'rv_iv_ratio': 0.46,
+        'current_iv':  None,
+        'rv_iv_ratio': None,
+        'hv5':         None,
+        'hv10':        None,
+        'hv21':        None,
+        'hv63':        None,
     }
-
     try:
-        cone = fetch_cone(session)
-        ctx.update(cone)
+        url = f"{BASE_URL}/vol/realized?symbol={SYMBOL}"
+        r = session.get(url, timeout=15)
+        r.raise_for_status()
+        d = r.json()
+        ctx['current_iv']  = d.get('current_iv')
+        ctx['rv_iv_ratio'] = d.get('rv_iv_ratio')
+        ctx['hv5']         = d.get('hv5')
+        ctx['hv10']        = d.get('hv10')
+        ctx['hv21']        = d.get('hv21')
+        ctx['hv63']        = d.get('hv63')
     except Exception as e:
-        print(f"  Warning: cone fetch failed ({e})")
-
-    try:
-        realized = fetch_realized(session)
-        # Try common field names
-        ctx['current_iv']  = (realized.get('current_iv')
-                               or realized.get('iv')
-                               or realized.get('implied_vol')
-                               or ctx['current_iv'])
-        ctx['rv_iv_ratio'] = (realized.get('rv_iv_ratio')
-                               or realized.get('ratio')
-                               or ctx['rv_iv_ratio'])
-        # HV from realized if better than cone
-        ctx['hv21'] = realized.get('hv21') or ctx['hv21']
-    except Exception as e:
-        print(f"  Warning: realized fetch failed ({e})")
-
+        print(f"  Warning: vol fetch failed ({e})")
     return ctx
 
 
@@ -152,18 +113,6 @@ def get_trading_days(n=5):
 # ============================================================
 
 def aggregate_exposures(fl_data):
-    """
-    Aggregate all per-option exposures by NQ strike.
-
-    FreeFlow fields (already OI-weighted per option):
-      gex      net gamma exposure  (+ = call wall, - = put wall)
-      ag       absolute gamma
-      vex      vanna exposure      (vol-sensitivity of delta hedging)
-      charmex  charm exposure      (time-decay drift in hedging)
-      dex      delta exposure
-      vegaex   vega exposure
-      dag      delta-adjusted gamma
-    """
     rows = fl_data.get('rows', [])
     if not rows:
         raise ValueError("No rows in futures-levels response.")
@@ -226,19 +175,12 @@ def aggregate_multi_expiry(fl_datasets):
 
 def classify_regime(ctx):
     """
-    Classify vol regime and return scoring weights.
-
-    CONTRACTION (IV < 20%):
-      Gamma walls are sticky. GEX dominates.
-
-    NEUTRAL (20-30%):
-      Mixed. GEX and VEX both matter.
-
-    EXPANSION (IV > 30% or RV/IV < 0.5):
-      Vol-driven flows overwhelm gamma hedging. VEX dominates.
+    CONTRACTION (IV < 20%): gamma walls sticky, GEX dominates
+    NEUTRAL     (20-30%):   mixed, GEX and VEX both matter
+    EXPANSION   (IV > 30% or RV/IV < 0.5): vol flows dominate, VEX dominates
     """
-    iv    = ctx.get('current_iv',  37.0)
-    rv_iv = ctx.get('rv_iv_ratio', 0.46)
+    iv    = ctx.get('current_iv')  or 37.0
+    rv_iv = ctx.get('rv_iv_ratio') or 0.46
 
     if iv >= 30 or rv_iv < 0.5:
         regime  = "EXPANSION"
@@ -305,18 +247,19 @@ def score_levels(agg, weights, futures_price, filter_pct=FILTER_PCT):
 # ============================================================
 
 def print_output(nearby, ctx, regime, futures_price, spot_etf, exp, multi=False):
-    iv    = ctx.get('current_iv',  '?')
-    rv_iv = ctx.get('rv_iv_ratio', '?')
-    hv21  = ctx.get('hv21',        '?')
+    iv    = ctx.get('current_iv')
+    rv_iv = ctx.get('rv_iv_ratio')
+    hv21  = ctx.get('hv21')
     bar   = "=" * 85
 
-    if isinstance(iv, float):
-        iv_premium = f"  |  IV Premium: {(1/rv_iv - 1)*100:.0f}% above RV" if isinstance(rv_iv, float) and rv_iv > 0 else ""
-        iv_str     = f"{iv:.1f}%"
-        rv_str     = f"{rv_iv:.3f}" if isinstance(rv_iv, float) else str(rv_iv)
-        hv_str     = f"{hv21:.1f}%" if isinstance(hv21, float) else str(hv21)
+    iv_str  = f"{iv:.1f}%"  if isinstance(iv,    float) else str(iv)
+    rv_str  = f"{rv_iv:.3f}" if isinstance(rv_iv, float) else str(rv_iv)
+    hv_str  = f"{hv21:.1f}%" if isinstance(hv21,  float) else str(hv21)
+
+    if isinstance(iv, float) and isinstance(rv_iv, float) and rv_iv > 0:
+        iv_premium = f"  |  IV Premium: {(1/rv_iv - 1)*100:.0f}% above RV"
     else:
-        iv_str, rv_str, hv_str, iv_premium = str(iv), str(rv_iv), str(hv21), ""
+        iv_premium = ""
 
     mode = "MULTI-EXPIRY" if multi else f"EXP: {exp}"
 
@@ -366,11 +309,9 @@ def print_output(nearby, ctx, regime, futures_price, spot_etf, exp, multi=False)
 
 
 def export_json(nearby, ctx, regime, futures_price, spot_etf, output_path=None):
-    """Write levels_data.json consumed by the dashboard Levels tab."""
+    """Write levels_data.json consumed by the Vanta dashboard Levels tab."""
     if output_path is None:
         output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'levels_data.json')
-
-    now_et = datetime.now().strftime('%Y-%m-%d %H:%M ET')
 
     levels = []
     if nearby is not None and not nearby.empty:
@@ -387,20 +328,24 @@ def export_json(nearby, ctx, regime, futures_price, spot_etf, output_path=None):
                 'total_oi':       int(row['total_oi']),
             })
 
+    iv    = ctx.get('current_iv')
+    rv_iv = ctx.get('rv_iv_ratio')
+    hv21  = ctx.get('hv21')
+
     payload = {
-        'updated':     now_et,
+        'updated':     datetime.now().strftime('%Y-%m-%d %H:%M ET'),
         'nq_price':    round(float(futures_price), 1),
         'qqq_price':   round(float(spot_etf), 2),
         'regime':      regime,
-        'iv':          round(float(ctx.get('current_iv',  0)), 1),
-        'rv_iv_ratio': round(float(ctx.get('rv_iv_ratio', 0)), 3),
-        'hv21':        round(float(ctx.get('hv21',         0)), 1),
+        'iv':          round(float(iv),    1) if iv    is not None else None,
+        'rv_iv_ratio': round(float(rv_iv), 3) if rv_iv is not None else None,
+        'hv21':        round(float(hv21),  1) if hv21  is not None else None,
         'levels':      levels,
     }
 
     with open(output_path, 'w') as f:
         json.dump(payload, f, indent=2)
-    print(f"  Saved: {output_path}  ({len(levels)} levels)")
+    print(f"  Saved levels_data.json  ({len(levels)} levels)")
     return output_path
 
 
@@ -433,18 +378,20 @@ def run_single(exp=None):
             print("Authentication failed. Update your COOKIES dict.")
         return None, None
 
-    ctx              = get_vol_context(session)
-    futures_price    = fl_data.get('futures_price', 0)
-    spot_etf         = fl_data.get('etf_spot', 0)
-    agg              = aggregate_exposures(fl_data)
-    regime, weights  = classify_regime(ctx)
-    nearby           = score_levels(agg, weights, futures_price)
+    ctx             = get_vol_context(session)
+    futures_price   = fl_data.get('futures_price', 0)
+    spot_etf        = fl_data.get('etf_spot', 0)
+    agg             = aggregate_exposures(fl_data)
+    regime, weights = classify_regime(ctx)
+    nearby          = score_levels(agg, weights, futures_price)
 
     print_output(nearby, ctx, regime, futures_price, spot_etf, exp)
+
     try:
         export_json(nearby, ctx, regime, futures_price, spot_etf)
     except Exception as e:
         print(f"  Warning: failed to write levels_data.json ({e})")
+
     return nearby, fl_data
 
 
@@ -479,10 +426,12 @@ def run_multi(n_expiries=3):
 
     print_output(nearby, ctx, regime, futures_price, spot_etf,
                  exp=expiries[0], multi=True)
+
     try:
         export_json(nearby, ctx, regime, futures_price, spot_etf)
     except Exception as e:
         print(f"  Warning: failed to write levels_data.json ({e})")
+
     return nearby
 
 # ============================================================
