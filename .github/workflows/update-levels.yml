@@ -1,0 +1,38 @@
+name: Update FreeFlow Levels Data
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  update-levels:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements_levels.txt ]; then python -m pip install -r requirements_levels.txt; fi
+
+      - name: Run FreeFlow level exporter
+        run: |
+          python freeflow_levels.py
+
+      - name: Commit updated levels_data.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add levels_data.json
+          git diff --cached --quiet -- levels_data.json || git commit -m "Update levels_data.json"
+          git push

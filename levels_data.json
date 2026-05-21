@@ -1,10 +1,187 @@
 {
-  "updated": "2026-05-21 00:00 ET",
-  "nq_price": 0.0,
-  "qqq_price": 0.0,
-  "regime": "UNKNOWN",
-  "iv": 0.0,
-  "rv_iv_ratio": 0.0,
-  "hv21": 0.0,
-  "levels": []
+  "updated": "2026-05-21 08:03 ET",
+  "nq_price": 29267.5,
+  "qqq_price": 713.15,
+  "regime": "EXPANSION",
+  "iv": 37.2,
+  "rv_iv_ratio": 0.459,
+  "hv21": 17.1,
+  "levels": [
+    {
+      "strike_futures": 28727.8,
+      "strike_etf": 700.0,
+      "dist_nq": -539.7,
+      "score": 88.7,
+      "type": "PUT WALL + VOL SENSITIVE",
+      "net_gex": -101586236,
+      "net_vex": 409863762,
+      "net_charmex": 221837830,
+      "total_oi": 13306
+    },
+    {
+      "strike_futures": 29548.6,
+      "strike_etf": 720.0,
+      "dist_nq": 281.1,
+      "score": 78.4,
+      "type": "CALL WALL + VOL SENSITIVE",
+      "net_gex": 123752838,
+      "net_vex": 314196786,
+      "net_charmex": -135487665,
+      "total_oi": 8571
+    },
+    {
+      "strike_futures": 28933.0,
+      "strike_etf": 705.0,
+      "dist_nq": -334.5,
+      "score": 54.9,
+      "type": "PUT WALL + VOL SENSITIVE",
+      "net_gex": -77506471,
+      "net_vex": 206206186,
+      "net_charmex": 146796543,
+      "total_oi": 9523
+    },
+    {
+      "strike_futures": 28522.6,
+      "strike_etf": 695.0,
+      "dist_nq": -744.9,
+      "score": 40.5,
+      "type": "PUT WALL + VOL SENSITIVE",
+      "net_gex": -37117729,
+      "net_vex": 192501269,
+      "net_charmex": 105824422,
+      "total_oi": 7312
+    },
+    {
+      "strike_futures": 29343.4,
+      "strike_etf": 715.0,
+      "dist_nq": 75.9,
+      "score": 36.4,
+      "type": "CALL WALL",
+      "net_gex": 74936522,
+      "net_vex": 50492477,
+      "net_charmex": -33984214,
+      "total_oi": 6305
+    },
+    {
+      "strike_futures": 28604.7,
+      "strike_etf": 697.0,
+      "dist_nq": -662.8,
+      "score": 36.3,
+      "type": "PUT WALL + VOL SENSITIVE",
+      "net_gex": -35240315,
+      "net_vex": 167478225,
+      "net_charmex": 101315163,
+      "total_oi": 6513
+    },
+    {
+      "strike_futures": 28112.2,
+      "strike_etf": 685.0,
+      "dist_nq": -1155.3,
+      "score": 32.0,
+      "type": "PUT WALL + VOL SENSITIVE",
+      "net_gex": -19858648,
+      "net_vex": 135944861,
+      "net_charmex": 80530735,
+      "total_oi": 8846
+    },
+    {
+      "strike_futures": 28317.4,
+      "strike_etf": 690.0,
+      "dist_nq": -950.1,
+      "score": 28.4,
+      "type": "PUT WALL + VOL SENSITIVE",
+      "net_gex": -21523109,
+      "net_vex": 131680824,
+      "net_charmex": 72570673,
+      "total_oi": 6281
+    },
+    {
+      "strike_futures": 28809.9,
+      "strike_etf": 702.0,
+      "dist_nq": -457.6,
+      "score": 28.2,
+      "type": "PUT WALL + VOL SENSITIVE",
+      "net_gex": -29175184,
+      "net_vex": 102442828,
+      "net_charmex": 87959442,
+      "total_oi": 5241
+    },
+    {
+      "strike_futures": 29630.7,
+      "strike_etf": 722.0,
+      "dist_nq": 363.2,
+      "score": 25.7,
+      "type": "CALL WALL + VOL SENSITIVE",
+      "net_gex": 36226384,
+      "net_vex": 119541186,
+      "net_charmex": -49550408,
+      "total_oi": 2838
+    },
+    {
+      "strike_futures": 29589.7,
+      "strike_etf": 721.0,
+      "dist_nq": 322.2,
+      "score": 25.4,
+      "type": "CALL WALL + VOL SENSITIVE",
+      "net_gex": 37795917,
+      "net_vex": 110324784,
+      "net_charmex": -48382355,
+      "total_oi": 2873
+    },
+    {
+      "strike_futures": 29138.2,
+      "strike_etf": 710.0,
+      "dist_nq": -129.3,
+      "score": 24.3,
+      "type": "CALL WALL",
+      "net_gex": 8929329,
+      "net_vex": -9633212,
+      "net_charmex": 63995055,
+      "total_oi": 8365
+    },
+    {
+      "strike_futures": 29466.5,
+      "strike_etf": 718.0,
+      "dist_nq": 199.0,
+      "score": 23.6,
+      "type": "CALL WALL",
+      "net_gex": 35438443,
+      "net_vex": 63219473,
+      "net_charmex": -71328854,
+      "total_oi": 5682
+    },
+    {
+      "strike_futures": 29753.8,
+      "strike_etf": 725.0,
+      "dist_nq": 486.3,
+      "score": 22.9,
+      "type": "CALL WALL + VOL SENSITIVE",
+      "net_gex": 26700223,
+      "net_vex": 118564935,
+      "net_charmex": -49799530,
+      "total_oi": 2922
+    },
+    {
+      "strike_futures": 29425.5,
+      "strike_etf": 717.0,
+      "dist_nq": 158.0,
+      "score": 21.6,
+      "type": "CALL WALL",
+      "net_gex": 40617530,
+      "net_vex": 57282394,
+      "net_charmex": -30233132,
+      "total_oi": 2905
+    },
+    {
+      "strike_futures": 29056.2,
+      "strike_etf": 708.0,
+      "dist_nq": -211.3,
+      "score": 20.1,
+      "type": "PUT WALL",
+      "net_gex": -32636952,
+      "net_vex": 56611047,
+      "net_charmex": 49968262,
+      "total_oi": 4300
+    }
+  ]
 }
