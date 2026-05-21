@@ -3,7 +3,6 @@ import os
 import sys
 import numpy as np
 import pandas as pd
-import xgboost as xgb
 import yfinance as yf
 import requests
 import pickle

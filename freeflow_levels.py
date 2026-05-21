@@ -11,7 +11,6 @@ Place in: C:\\Users\\asare\\Downloads\\h41_bias&regime_engine\\
 
 import requests
 import pandas as pd
-import numpy as np
 from datetime import datetime, date, timedelta
 import sys
 import os
