@@ -571,6 +571,29 @@ footer .alph { color: rgba(255,255,255,0.55); }
   padding: 18px 14px; color: var(--ghost);
   font-size: 10px; font-style: italic;
 }
+.lvl-refresh-status {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  background: rgba(255,255,255,0.02);
+  color: var(--ghost);
+  font-size: 11px;
+}
+.lvl-refresh-status .refresh-label {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ghost);
+}
+.lvl-refresh-status .refresh-countdown {
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  color: var(--text);
+}
 
 </style>
 </head>
@@ -1094,6 +1117,11 @@ function renderLevels(d) {
 
   app.appendChild(hdr);
 
+  const refreshBar = el("div", {className:"lvl-refresh-status"});
+  refreshBar.appendChild(el("div", {className:"refresh-label"}, "Levels refresh every hour (8am-3pm ET)"));
+  refreshBar.appendChild(el("div", {id:"levels-refresh-countdown", className:"refresh-countdown"}, "Next refresh in 01:00:00"));
+  app.appendChild(refreshBar);
+
   // ── SUPPORT / RESISTANCE PANELS ──
   const support    = levels.filter(function(l) { return l.net_gex <= 0; })
                            .sort(function(a, b) { return b.score - a.score; });
@@ -1133,6 +1161,60 @@ function renderLevels(d) {
 
 // ── LOAD LEVELS ───────────────────────────────────
 let levelsLoaded = false;
+const LEVELS_REFRESH_MS = 60 * 60 * 1000;
+let levelsNextRefresh = Date.now() + LEVELS_REFRESH_MS;
+let levelsCountdownTimer = null;
+
+function getETHour() {
+  const now = new Date();
+  const etTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  return etTime.getHours();
+}
+
+function isBusinessHours() {
+  const hour = getETHour();
+  return hour >= 8 && hour < 16;
+}
+
+function formatDuration(ms) {
+  if (ms <= 0) return "00:00";
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const mins = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
+  if (hours > 0) {
+    return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+function updateLevelsCountdown() {
+  const el = document.getElementById("levels-refresh-countdown");
+  if (!el) return;
+  
+  if (!isBusinessHours()) {
+    el.textContent = "Data offline (resumes at 8am ET)";
+    el.style.color = "var(--ghost)";
+    return;
+  }
+  
+  const remaining = levelsNextRefresh - Date.now();
+  if (remaining <= 0) {
+    el.textContent = "Refreshing now…";
+    el.style.color = "var(--text)";
+  } else {
+    el.textContent = `Next refresh in ${formatDuration(remaining)}`;
+    el.style.color = "var(--text)";
+  }
+}
+
+function startLevelsCountdown() {
+  levelsNextRefresh = Date.now() + LEVELS_REFRESH_MS;
+  updateLevelsCountdown();
+  if (levelsCountdownTimer === null) {
+    levelsCountdownTimer = setInterval(updateLevelsCountdown, 1000);
+  }
+
 
 function loadLevels() {
   fetch("levels_data.json?_=" + Date.now())
@@ -1143,6 +1225,7 @@ function loadLevels() {
     .then(function(d) {
       levelsLoaded = true;
       renderLevels(d);
+      startLevelsCountdown();
     })
     .catch(function() {
       if (!levelsLoaded) {
@@ -1172,7 +1255,7 @@ fetch("bias_output.json")
   });
 
 loadLevels();
-setInterval(loadLevels, 5 * 60 * 1000);
+setInterval(loadLevels, 60 * 60 * 1000);
 </script>
 
 </body>
