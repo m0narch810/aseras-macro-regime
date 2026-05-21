@@ -1214,7 +1214,7 @@ function startLevelsCountdown() {
   if (levelsCountdownTimer === null) {
     levelsCountdownTimer = setInterval(updateLevelsCountdown, 1000);
   }
-
+}
 
 function loadLevels() {
   fetch("levels_data.json?_=" + Date.now())
