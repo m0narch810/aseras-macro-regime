@@ -1269,7 +1269,7 @@ function startCountdownTimer() {
 }
 
 function loadLevels() {
-  fetch("levels_data.json?_=" + Date.now())
+  fetch("/.netlify/functions/levels?_=" + Date.now())
     .then(function(r) {
       if (!r.ok) throw new Error("HTTP " + r.status);
       return r.json();
@@ -1290,6 +1290,8 @@ function loadLevels() {
       scheduleNextRefresh();
     });
 }
+
+setInterval(loadLevels, 5 * 60 * 1000);
 
 // ── INIT ──────────────────────────────────────────
 fetch("bias_output.json")
