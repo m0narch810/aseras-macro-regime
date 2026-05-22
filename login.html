@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vαntα · access</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,300&display=swap" rel="stylesheet">
+<script src="auth.js"></script>
+<style>
+
+/* ── TOKENS (match index.html exactly) ───────────── */
+:root {
+  --bg:          #060608;
+  --bg-grid:     rgba(255,255,255,0.033);
+  --surface:     rgba(255,255,255,0.032);
+  --border:      rgba(255,255,255,0.088);
+  --border-hi:   rgba(255,255,255,0.18);
+  --text:        #f0f2f5;
+  --muted:       rgba(195,205,218,0.82);
+  --ghost:       rgba(170,182,198,0.72);
+  --accent:      #c8d0dc;
+  --bull:        #34d399;
+  --bull-glow:   rgba(52,211,153,0.28);
+  --bear:        #f87171;
+  --bear-glow:   rgba(248,113,113,0.28);
+}
+
+/* ── RESET ───────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── BASE ────────────────────────────────────────── */
+body {
+  background-color: var(--bg);
+  background-image: radial-gradient(circle, var(--bg-grid) 1px, transparent 1px);
+  background-size: 36px 36px;
+  color: var(--text);
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 12.5px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* ── SCAN LINE ───────────────────────────────────── */
+.scan-line {
+  position: fixed; left: 0; width: 100%; height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255,255,255,0.03) 15%,
+    rgba(255,255,255,0.1) 50%,
+    rgba(255,255,255,0.03) 85%,
+    transparent 100%
+  );
+  pointer-events: none; z-index: 0;
+  animation: scan 16s linear infinite;
+}
+@keyframes scan {
+  0%   { top: -2px; opacity: 0; }
+  5%   { opacity: 1; }
+  95%  { opacity: 1; }
+  100% { top: 100vh; opacity: 0; }
+}
+
+/* ── CORNER BRACKETS ─────────────────────────────── */
+.corner {
+  position: fixed;
+  width: 16px; height: 16px;
+  border-color: rgba(255,255,255,0.09);
+  border-style: solid;
+  pointer-events: none;
+}
+.corner-tl { top: 22px; left: 22px;  border-width: 1px 0 0 1px; }
+.corner-tr { top: 22px; right: 22px; border-width: 1px 1px 0 0; }
+.corner-bl { bottom: 22px; left: 22px;  border-width: 0 0 1px 1px; }
+.corner-br { bottom: 22px; right: 22px; border-width: 0 1px 1px 0; }
+
+/* ── LOGIN BOX ───────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.login-box {
+  position: relative; z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 320px;
+  padding: 0 24px;
+  animation: fadeUp 0.8s cubic-bezier(0.16,1,0.3,1) forwards;
+}
+
+/* ── GLITCH LOGO ─────────────────────────────────── */
+.logo-wrap {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 56px;
+}
+
+.logo-layer {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 44px;
+  letter-spacing: 0.14em;
+  color: var(--text);
+  user-select: none;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.logo-layer .alph {
+  color: #ffffff;
+  text-shadow: 0 0 16px rgba(255,255,255,0.35);
+}
+
+/* glitch ghost layers */
+.logo-r,
+.logo-b {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.logo-r { color: var(--bear); mix-blend-mode: screen; }
+.logo-r .alph { color: var(--bear); text-shadow: 0 0 14px var(--bear-glow); }
+
+.logo-b { color: var(--bull); mix-blend-mode: screen; }
+.logo-b .alph { color: var(--bull); text-shadow: 0 0 14px var(--bull-glow); }
+
+/* ── GLITCH KEYFRAMES ────────────────────────────── */
+@keyframes glitch-main {
+  0%, 87%, 100% { transform: none; }
+  88%   { transform: translate(-2px, 0) skew(-0.5deg); }
+  89%   { transform: translate(3px, 1px); }
+  90%   { transform: translate(-1px, -1px) skew(0.5deg); }
+  91%   { transform: none; }
+  93%   { transform: translate(1px, 0); }
+  94%   { transform: translate(-2px, 1px) skew(-0.3deg); }
+  95%   { transform: none; }
+  97%   { transform: translate(2px, 0); }
+  98%   { transform: none; }
+}
+
+@keyframes glitch-r {
+  0%, 87%, 100% { opacity: 0; transform: none; clip-path: none; }
+  88%   { opacity: 0.75; transform: translate(4px, 0);
+          clip-path: polygon(0 5%, 100% 5%, 100% 38%, 0 38%); }
+  89%   { opacity: 0; }
+  90%   { opacity: 0.6; transform: translate(-4px, 1px);
+          clip-path: polygon(0 60%, 100% 60%, 100% 90%, 0 90%); }
+  91%   { opacity: 0; }
+  93%   { opacity: 0.5; transform: translate(5px, -1px);
+          clip-path: polygon(0 25%, 100% 25%, 100% 52%, 0 52%); }
+  94%   { opacity: 0; }
+  97%   { opacity: 0.65; transform: translate(-3px, 2px);
+          clip-path: polygon(0 70%, 100% 70%, 100% 100%, 0 100%); }
+  98%   { opacity: 0; }
+}
+
+@keyframes glitch-b {
+  0%, 87%, 100% { opacity: 0; transform: none; clip-path: none; }
+  88%   { opacity: 0; }
+  89%   { opacity: 0.65; transform: translate(-5px, 1px);
+          clip-path: polygon(0 42%, 100% 42%, 100% 75%, 0 75%); }
+  90%   { opacity: 0; }
+  91%   { opacity: 0.55; transform: translate(3px, 0);
+          clip-path: polygon(0 0, 100% 0, 100% 28%, 0 28%); }
+  92%   { opacity: 0; }
+  94%   { opacity: 0.7; transform: translate(-4px, -2px);
+          clip-path: polygon(0 55%, 100% 55%, 100% 85%, 0 85%); }
+  95%   { opacity: 0; }
+  98%   { opacity: 0.5; transform: translate(2px, 0);
+          clip-path: polygon(0 10%, 100% 10%, 100% 40%, 0 40%); }
+}
+
+@keyframes glitch-main-2 {
+  0%, 42%, 48%, 100% { transform: none; }
+  43%   { transform: translate(2px, -1px) skew(0.4deg); }
+  44%   { transform: translate(-3px, 0); }
+  45%   { transform: none; }
+  47%   { transform: translate(1px, 1px); }
+}
+@keyframes glitch-r-2 {
+  0%, 42%, 48%, 100% { opacity: 0; clip-path: none; }
+  43%   { opacity: 0.6; transform: translate(3px, 0);
+          clip-path: polygon(0 15%, 100% 15%, 100% 45%, 0 45%); }
+  44%   { opacity: 0; }
+  46%   { opacity: 0.5; transform: translate(-3px, 1px);
+          clip-path: polygon(0 65%, 100% 65%, 100% 95%, 0 95%); }
+  47%   { opacity: 0; }
+}
+@keyframes glitch-b-2 {
+  0%, 42%, 48%, 100% { opacity: 0; clip-path: none; }
+  44%   { opacity: 0.6; transform: translate(-4px, -1px);
+          clip-path: polygon(0 30%, 100% 30%, 100% 62%, 0 62%); }
+  45%   { opacity: 0; }
+  47%   { opacity: 0.5; transform: translate(3px, 0);
+          clip-path: polygon(0 0, 100% 0, 100% 22%, 0 22%); }
+  48%   { opacity: 0; }
+}
+
+.logo-main { animation: glitch-main 1s infinite, glitch-main-2 2s 2.3s infinite; }
+.logo-r    { animation: glitch-r    1s infinite, glitch-r-2    2s 2.3s infinite; }
+.logo-b    { animation: glitch-b    1s infinite, glitch-b-2    2s 2.3s infinite; }
+
+/* ── FORM ────────────────────────────────────────── */
+.form-group {
+  width: 100%;
+  margin-bottom: 30px;
+}
+
+label {
+  display: block;
+  font-family: 'Syne', sans-serif;
+  font-size: 7.5px;
+  letter-spacing: 0.28em;
+  color: var(--ghost);
+  margin-bottom: 10px;
+}
+
+input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 7px 0 9px;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.18s;
+  caret-color: var(--accent);
+  letter-spacing: 0.02em;
+}
+input::placeholder {
+  color: rgba(170,182,198,0.2);
+  font-size: 12px;
+}
+input:focus {
+  border-bottom-color: rgba(255,255,255,0.22);
+}
+
+/* ── SUBMIT ──────────────────────────────────────── */
+.submit-btn {
+  width: 100%;
+  margin-top: 6px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--ghost);
+  font-family: 'Syne', sans-serif;
+  font-size: 8.5px;
+  letter-spacing: 0.28em;
+  padding: 13px 0;
+  cursor: pointer;
+  transition: border-color 0.18s, color 0.18s, background 0.18s;
+  outline: none;
+}
+.submit-btn:hover:not(:disabled) {
+  border-color: var(--border-hi);
+  color: var(--text);
+  background: var(--surface);
+}
+.submit-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+/* ── ERROR ───────────────────────────────────────── */
+.error-msg {
+  margin-top: 22px;
+  font-size: 10px;
+  color: var(--bear);
+  letter-spacing: 0.08em;
+  text-align: center;
+  min-height: 14px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.error-msg.visible { opacity: 1; }
+
+</style>
+</head>
+<body>
+
+<div class="scan-line"></div>
+<div class="corner corner-tl"></div>
+<div class="corner corner-tr"></div>
+<div class="corner corner-bl"></div>
+<div class="corner corner-br"></div>
+
+<div class="login-box">
+
+  <div class="logo-wrap">
+    <div class="logo-layer logo-main">v<span class="alph">&#945;</span>nt<span class="alph">&#945;</span></div>
+    <div class="logo-layer logo-r" aria-hidden="true">v<span class="alph">&#945;</span>nt<span class="alph">&#945;</span></div>
+    <div class="logo-layer logo-b" aria-hidden="true">v<span class="alph">&#945;</span>nt<span class="alph">&#945;</span></div>
+  </div>
+
+  <div class="form-group">
+    <label for="username">username</label>
+    <input
+      type="text"
+      id="username"
+      placeholder="identity"
+      autocomplete="username"
+      spellcheck="false"
+      autocapitalize="none"
+    >
+  </div>
+
+  <div class="form-group">
+    <label for="password">password</label>
+    <input
+      type="password"
+      id="password"
+      placeholder="••••••••"
+      autocomplete="current-password"
+    >
+  </div>
+
+  <button class="submit-btn" id="login-btn">sign in</button>
+  <div class="error-msg" id="error-msg"></div>
+
+</div>
+
+<script>
+// Check session presence immediately on load via browser memory
+if (localStorage.getItem("vanta_session")) {
+  window.location.replace("index.html");
+}
+
+const userEl = document.getElementById("username");
+const passEl = document.getElementById("password");
+const btn    = document.getElementById("login-btn");
+const errEl  = document.getElementById("error-msg");
+
+function showErr(msg) {
+  errEl.textContent = msg;
+  errEl.classList.add("visible");
+}
+
+function clearErr() {
+  errEl.classList.remove("visible");
+}
+
+async function login() {
+  clearErr();
+  const username = userEl.value.trim();
+  const password = passEl.value;
+
+  if (!username || !password) {
+    showErr("please fill in all fields");
+    return;
+  }
+
+  btn.disabled    = true;
+  btn.textContent = "authenticating…";
+
+  // Calls custom local verification routine in auth.js asynchronously
+  try {
+    const success = await vantaLogin(username, password);
+    if (!success) {
+      btn.disabled    = false;
+      btn.textContent = "sign in";
+      showErr("invalid credentials");
+    }
+  } catch (err) {
+    btn.disabled    = false;
+    btn.textContent = "sign in";
+    showErr("authentication failed");
+  }
+}
+
+btn.addEventListener("click", login);
+
+passEl.addEventListener("keydown", function(e) {
+  if (e.key === "Enter") login();
+});
+userEl.addEventListener("keydown", function(e) {
+  if (e.key === "Enter") passEl.focus();
+});
+
+userEl.addEventListener("input", clearErr);
+passEl.addEventListener("input",  clearErr);
+</script>
+
+</body>
+</html>

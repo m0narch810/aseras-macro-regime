@@ -1,6 +1,7 @@
 .env
 __pycache__/
 logs/
+._*
 # *.pkl  — models are small (<500KB total), committed for Render deployment
 
 # Raw data

@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,300&display=swap" rel="stylesheet">
+<script src="auth.js"></script>
 <style>
 
 /* ── TOKENS ──────────────────────────────────────── */
@@ -138,6 +139,25 @@ header {
   animation: blink 2.4s ease-in-out infinite;
 }
 @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.18; } }
+
+/* ── LOGOUT BUTTON ───────────────────────────────── */
+.logout-btn {
+  font-family: 'Syne', sans-serif;
+  font-size: 7.5px;
+  letter-spacing: 0.2em;
+  color: var(--ghost);
+  background: none;
+  border: 1px solid var(--border);
+  padding: 5px 13px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  outline: none;
+  text-transform: lowercase;
+}
+.logout-btn:hover {
+  color: var(--text);
+  border-color: var(--border-hi);
+}
 
 /* ── TABS ────────────────────────────────────────── */
 .tab-bar {
@@ -713,6 +733,7 @@ footer .alph { color: rgba(255,255,255,0.55); }
     <div class="header-right">
       <div class="hdr-tag" id="meta-ts"></div>
       <div class="live-dot">Live</div>
+      <button class="logout-btn" onclick="vantaLogout()">sign out</button>
     </div>
   </header>
 
@@ -1227,12 +1248,10 @@ function renderLevels(d) {
   }
 
   hdr.appendChild(stat("Updated", d.updated || "—"));
-
   hdr.appendChild(stat("NQ",
     d.nq_price != null
       ? d.nq_price.toLocaleString("en-US", {minimumFractionDigits:1, maximumFractionDigits:1})
       : "—"));
-
   hdr.appendChild(stat("QQQ",
     d.qqq_price != null ? d.qqq_price.toFixed(2) : "—"));
 
@@ -1240,8 +1259,7 @@ function renderLevels(d) {
     String(d.regime || "—"));
   hdr.appendChild(stat("Regime", regBadge));
 
-  const gfColor = (d.gamma_flip != null)
-    ? "var(--mixed)" : "var(--ghost)";
+  const gfColor = (d.gamma_flip != null) ? "var(--mixed)" : "var(--ghost)";
   const gfSpan = el("span", {style:{color:gfColor, fontWeight:"700"}},
     d.gamma_flip != null ? d.gamma_flip.toLocaleString("en-US", {minimumFractionDigits:1, maximumFractionDigits:1}) : "—");
   hdr.appendChild(stat("γ Flip (NQ)", gfSpan));
@@ -1256,7 +1274,7 @@ function renderLevels(d) {
   hdr.appendChild(stat("RV/IV", rvSpan));
 
   hdr.appendChild(stat("HV21",
-    d.hv21 != null ? d.hv21.toFixed(1) + "%" : "—"));
+    d.iv != null ? d.hv21.toFixed(1) + "%" : "—"));
 
   app.appendChild(hdr);
 
@@ -1292,7 +1310,7 @@ function renderLevels(d) {
   }
 
   panels.appendChild(panelCard("var(--bear)", "Resistance · Call Walls", resistance));
-  panels.appendChild(panelCard("var(--bull)", "Support · Put Walls",     support));
+  panels.appendChild(panelCard("var(--bull)", "Support · Put Walls",      support));
   app.appendChild(panels);
 
   // ── ALL LEVELS TABLE ──
@@ -1409,7 +1427,13 @@ function startCountdownTimer() {
 }
 
 function loadLevels() {
-  fetch("/.netlify/functions/levels?_=" + Date.now())
+  // Uses custom background function and injects authorization header token
+  fetch("/.netlify/functions/levels?_" + Date.now(), {
+    method: "GET",
+    headers: {
+      "Authorization": "Bearer " + localStorage.getItem("vanta_session")
+    }
+  })
     .then(function(r) {
       if (!r.ok) throw new Error("HTTP " + r.status);
       return r.json();
@@ -1725,7 +1749,13 @@ function loadIntraday() {
 }
 
 // ── INIT ──────────────────────────────────────────
-fetch("bias_output.json")
+// Swapped out direct static file reads for a curl-proof netlify route handler
+fetch("/.netlify/functions/bias?_" + Date.now(), {
+  method: "GET",
+  headers: {
+    "Authorization": "Bearer " + localStorage.getItem("vanta_session")
+  }
+})
   .then(function(r) {
     if (!r.ok) throw new Error("HTTP " + r.status);
     return r.json();
@@ -1735,10 +1765,8 @@ fetch("bias_output.json")
     const app = document.getElementById("app");
     clearEl(app);
     const d = el("div", {className:"err"});
-    d.appendChild(el("p", {}, "Could not load bias_output.json"));
+    d.appendChild(el("p", {}, "Could not load engine data securely."));
     d.appendChild(el("p", {style:{marginTop:"8px",fontSize:"11px",color:"var(--muted)"}}, err.message));
-    d.appendChild(el("p", {style:{marginTop:"4px",fontSize:"11px",color:"var(--muted)"}},
-      "Ensure bias_output.json is in the same directory as index.html."));
     app.appendChild(d);
   });
 

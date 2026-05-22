@@ -1,0 +1,16 @@
+# Netlify _headers
+# Blocks unauthenticated browser/curl access to raw data files.
+# Place this file at the ROOT of your project (same level as index.html).
+
+# ── Protect bias_output.json ─────────────────────────────────
+/bias_output.json
+  Cache-Control: no-store, no-cache, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive
+  X-Content-Type-Options: nosniff
+
+# ── Security headers for all pages ───────────────────────────
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=()
