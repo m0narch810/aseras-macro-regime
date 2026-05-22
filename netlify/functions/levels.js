@@ -85,28 +85,36 @@ function aggregateDataset(data) {
 }
 
 // ── GAMMA FLIP ────────────────────────────────────────────────
-function computeGammaFlip(strikes) {
+// Per-strike GEX sign change: call walls (positive) → put walls (negative).
+// Interpolates the exact zero crossing between adjacent strikes and returns
+// the crossing nearest to the current futures price.
+function computeGammaFlip(strikes, futuresPrice) {
   const sorted = Object.entries(strikes)
     .map(([sf, s]) => ({ strike: +sf, gex: s.net_gex }))
-    .sort((a, b) => b.strike - a.strike); // descending: high → low
+    .sort((a, b) => a.strike - b.strike); // ascending
 
-  let cumGex = 0;
-  let closestStrike = null;
-  let closestAbs    = Infinity;
+  let bestFlip = null;
+  let bestDist = Infinity;
 
-  for (const row of sorted) {
-    const prev = cumGex;
-    cumGex += row.gex;
-    // Exact zero crossing — return immediately
-    if (prev > 0 && cumGex <= 0) return Math.round(row.strike * 10) / 10;
-    if (prev < 0 && cumGex >= 0) return Math.round(row.strike * 10) / 10;
-    // Track nearest-to-zero as fallback (GEX profile skewed one direction)
-    if (Math.abs(cumGex) < closestAbs) {
-      closestAbs    = Math.abs(cumGex);
-      closestStrike = row.strike;
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const a = sorted[i], b = sorted[i + 1];
+    if ((a.gex > 0 && b.gex <= 0) || (a.gex < 0 && b.gex >= 0)) {
+      // Linear interpolation to exact zero between the two bracketing strikes
+      const flip = a.strike + (b.strike - a.strike) * Math.abs(a.gex) / (Math.abs(a.gex) + Math.abs(b.gex));
+      const dist = Math.abs(flip - futuresPrice);
+      if (dist < bestDist) { bestDist = dist; bestFlip = flip; }
     }
   }
-  return closestStrike != null ? Math.round(closestStrike * 10) / 10 : null;
+
+  // Fallback: strike whose per-strike GEX is closest to zero
+  if (bestFlip == null) {
+    let minAbs = Infinity;
+    for (const row of sorted) {
+      if (Math.abs(row.gex) < minAbs) { minAbs = Math.abs(row.gex); bestFlip = row.strike; }
+    }
+  }
+
+  return bestFlip != null ? Math.round(bestFlip * 10) / 10 : null;
 }
 
 // ── REGIME ────────────────────────────────────────────────────
@@ -186,15 +194,10 @@ exports.handler = async (event) => {
       ctx.hv21        = vol.hv21        ?? null;
     } catch (_) {}
 
-    // DEBUG — expose all top-level FreeFlow fields (remove after gamma flip confirmed)
-    const _ffMeta = Object.fromEntries(
-      Object.entries(data).filter(([k]) => k !== 'rows')
-    );
-
     const { strikes, futuresPrice, spotEtf } = aggregateDataset(data);
     const [regime, weights]                  = classifyRegime(ctx);
     const levels                             = scoreLevels(strikes, weights, futuresPrice);
-    const gammaFlip                          = computeGammaFlip(strikes);
+    const gammaFlip                          = computeGammaFlip(strikes, futuresPrice);
 
     const updatedET = new Date().toLocaleString('en-US', {
       timeZone: 'America/New_York',
@@ -214,7 +217,6 @@ exports.handler = async (event) => {
         rv_iv_ratio: ctx.rv_iv_ratio != null ? Math.round(ctx.rv_iv_ratio * 1000) / 1000 : null,
         hv21:        ctx.hv21        != null ? Math.round(ctx.hv21        * 10) / 10  : null,
         levels,
-        _ff: _ffMeta,
       }),
     };
 
