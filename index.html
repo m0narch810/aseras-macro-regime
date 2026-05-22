@@ -42,6 +42,11 @@
   --mixed-dim:  rgba(251,191,36,0.08);
   --mixed-b:    rgba(251,191,36,0.18);
   --mixed-glow: rgba(251,191,36,0.24);
+
+  --flip:      #f59e0b;
+  --flip-dim:  rgba(245,158,11,0.10);
+  --flip-b:    rgba(245,158,11,0.26);
+  --flip-glow: rgba(245,158,11,0.30);
 }
 
 /* ── RESET ───────────────────────────────────────── */
@@ -451,6 +456,85 @@ footer .alph { color: rgba(255,255,255,0.55); }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16); border-radius: 1px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.28); }
 
+/* ── INTRADAY TAB ────────────────────────────────── */
+.air-pocket-banner {
+  display: flex; align-items: flex-start; gap: 16px;
+  padding: 16px 22px; margin-bottom: 10px;
+  background: var(--flip-dim);
+  border: 1px solid var(--flip-b);
+  border-left: 4px solid var(--flip);
+  border-radius: 2px;
+  box-shadow: 0 0 40px var(--flip-glow);
+  opacity: 0;
+  animation: fadeUp 0.5s cubic-bezier(0.16,1,0.3,1) forwards;
+}
+.apw-icon { font-size: 22px; line-height: 1.2; flex-shrink: 0; margin-top: 1px; }
+.apw-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 11px; font-weight: 800;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--flip); margin-bottom: 4px;
+}
+.apw-desc { font-size: 11px; color: rgba(245,158,11,0.75); line-height: 1.55; }
+
+.iday-hero {
+  padding: 28px 32px; margin-bottom: 10px;
+  border: 1px solid var(--border); border-radius: 2px;
+  display: flex; align-items: flex-start;
+  justify-content: space-between; gap: 20px;
+  background: var(--surface);
+  opacity: 0;
+  animation: fadeUp 0.7s cubic-bezier(0.16,1,0.3,1) 0.03s forwards;
+  position: relative; overflow: hidden; flex-wrap: wrap;
+}
+.iday-hero::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+}
+.iday-hero.bull::before  { background: var(--bull);  box-shadow: 4px 0 20px var(--bull-glow); }
+.iday-hero.bear::before  { background: var(--bear);  box-shadow: 4px 0 20px var(--bear-glow); }
+.iday-hero.mixed::before { background: var(--mixed); box-shadow: 4px 0 20px var(--mixed-glow); }
+.iday-hero.bull  { border-color: rgba(52,211,153,0.24);  box-shadow: 0 0 60px rgba(52,211,153,0.04); }
+.iday-hero.bear  { border-color: rgba(248,113,113,0.24); box-shadow: 0 0 60px rgba(248,113,113,0.04); }
+.iday-hero.mixed { border-color: rgba(251,191,36,0.2);   box-shadow: 0 0 60px rgba(251,191,36,0.04); }
+
+.iday-label {
+  font-family: 'Syne', sans-serif;
+  font-size: 34px; font-weight: 800;
+  letter-spacing: 0.04em; line-height: 1; margin-bottom: 8px;
+}
+.iday-label.bull  { color: var(--bull);  text-shadow: 0 0 40px rgba(52,211,153,0.4); }
+.iday-label.bear  { color: var(--bear);  text-shadow: 0 0 40px rgba(248,113,113,0.4); }
+.iday-label.mixed { color: var(--mixed); text-shadow: 0 0 40px rgba(251,191,36,0.4); }
+
+.iday-conf {
+  display: inline-block; border-radius: 2px;
+  padding: 2px 10px;
+  font-family: 'Syne', sans-serif;
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  border: 1px solid transparent;
+}
+.iday-conf.bull  { background: var(--bull-dim);  border-color: var(--bull-b);  color: var(--bull); }
+.iday-conf.bear  { background: var(--bear-dim);  border-color: var(--bear-b);  color: var(--bear); }
+.iday-conf.mixed { background: var(--mixed-dim); border-color: var(--mixed-b); color: var(--mixed); }
+.iday-conf.ghost { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); color: var(--ghost); }
+
+.iday-reason {
+  width: 100%; margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  font-size: 11px; color: var(--muted); font-style: italic; line-height: 1.55;
+}
+
+.iday-state-badge {
+  font-family: 'Syne', sans-serif;
+  font-size: 15px; font-weight: 700;
+  letter-spacing: 0.08em; margin-bottom: 12px; display: block;
+}
+.iday-state-badge.bull  { color: var(--bull); }
+.iday-state-badge.bear  { color: var(--bear); }
+.iday-state-badge.mixed { color: var(--mixed); }
+.iday-state-badge.ghost { color: var(--ghost); }
+
 /* ── LEVELS TAB ──────────────────────────────────── */
 .lvls-header {
   background: var(--surface);
@@ -567,6 +651,27 @@ footer .alph { color: rgba(255,255,255,0.55); }
   font-family: 'Syne', sans-serif; letter-spacing: 0.26em;
   font-size: 11px; text-transform: uppercase;
 }
+
+.strike-toggle {
+  display: inline-flex; align-items: center;
+  border: 1px solid var(--border); border-radius: 2px;
+  overflow: hidden; cursor: pointer;
+}
+.strike-toggle-opt {
+  font-family: 'Syne', sans-serif;
+  font-size: 7px; letter-spacing: 0.18em; text-transform: uppercase;
+  padding: 4px 9px; color: var(--ghost);
+  transition: background 0.13s, color 0.13s;
+  user-select: none;
+}
+.strike-toggle-opt + .strike-toggle-opt {
+  border-left: 1px solid var(--border);
+}
+.strike-toggle-opt.on {
+  background: var(--accent-dim);
+  border-color: var(--accent-sub);
+  color: var(--accent);
+}
 .lvl-empty {
   padding: 18px 14px; color: var(--ghost);
   font-size: 10px; font-style: italic;
@@ -612,13 +717,17 @@ footer .alph { color: rgba(255,255,255,0.55); }
   </header>
 
   <nav class="tab-bar">
-    <button class="tab-btn active" data-tab="bias" onclick="switchTab('bias')">Bias</button>
+    <button class="tab-btn active" data-tab="bias" onclick="switchTab('bias')">Macro Bias</button>
+    <button class="tab-btn" data-tab="intraday" onclick="switchTab('intraday')">Intraday Bias</button>
     <button class="tab-btn" data-tab="levels" onclick="switchTab('levels')">Levels</button>
   </nav>
 
   <main>
     <div id="pane-bias" class="tab-pane active">
       <div id="app"><div class="loading">Initializing&hellip;</div></div>
+    </div>
+    <div id="pane-intraday" class="tab-pane">
+      <div id="intraday-app"><div class="lvl-await">Awaiting data&hellip;</div></div>
     </div>
     <div id="pane-levels" class="tab-pane">
       <div id="levels-app"><div class="lvl-await">Awaiting data&hellip;</div></div>
@@ -745,6 +854,14 @@ function render(d) {
   hero.appendChild(heroL);
   hero.appendChild(heroR);
   app.appendChild(hero);
+
+  // Macro timer bar
+  const macroBar = el("div", {className:"lvl-refresh-status"});
+  macroBar.appendChild(el("div", {className:"refresh-label"},
+    "Generated " + (meta.generated_at || "—")));
+  macroBar.appendChild(el("div", {id:"macro-next-update", className:"refresh-countdown"}, ""));
+  app.appendChild(macroBar);
+  startMacroBiasTimer();
 
   // ── ROW 1 ──
   app.appendChild(secLbl("Signal Breakdown"));
@@ -929,6 +1046,8 @@ function render(d) {
 }
 
 // ── TAB SWITCHING ─────────────────────────────────
+const VALID_TABS = ["bias", "intraday", "levels"];
+
 function switchTab(name) {
   const btns  = document.querySelectorAll(".tab-btn");
   const panes = document.querySelectorAll(".tab-pane");
@@ -939,14 +1058,14 @@ function switchTab(name) {
 
 function initHashRouting() {
   const hash = window.location.hash.slice(1) || "bias";
-  if (hash === "bias" || hash === "levels") {
+  if (VALID_TABS.indexOf(hash) !== -1) {
     switchTab(hash);
   }
 }
 
 window.addEventListener("hashchange", function() {
   const hash = window.location.hash.slice(1) || "bias";
-  if (hash === "bias" || hash === "levels") {
+  if (VALID_TABS.indexOf(hash) !== -1) {
     switchTab(hash);
   }
 });
@@ -1185,6 +1304,19 @@ function renderLevels(d) {
   renderAllTable(allWrap, levels);
 }
 
+// ── MACRO BIAS TIMER ──────────────────────────────
+let macroBiasTimer = null;
+
+function startMacroBiasTimer() {
+  const update = function() {
+    const e = document.getElementById("macro-next-update");
+    if (e) e.textContent = "Next H.4.1: " + formatDurationLong(msUntilNextH41());
+  };
+  update();
+  if (macroBiasTimer) clearInterval(macroBiasTimer);
+  macroBiasTimer = setInterval(update, 60000);
+}
+
 // ── LOAD LEVELS ───────────────────────────────────
 let levelsLoaded         = false;
 let levelsRefreshTimeout = null;
@@ -1203,6 +1335,39 @@ function formatDuration(ms) {
   const mins = Math.floor(s / 60);
   const secs = s % 60;
   return String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+}
+
+function formatDurationLong(ms) {
+  if (ms <= 0) return "updating…";
+  const s    = Math.floor(ms / 1000);
+  const days = Math.floor(s / 86400);
+  const hrs  = Math.floor((s % 86400) / 3600);
+  const mins = Math.floor((s % 3600) / 60);
+  if (days > 0) return days + "d " + hrs + "h " + mins + "m";
+  if (hrs  > 0) return hrs  + "h " + mins + "m";
+  return mins + "m";
+}
+
+function getETOffset() {
+  const now   = new Date();
+  const nyMs  = +new Date(now.toLocaleString('en-US', {timeZone: 'America/New_York'}));
+  const utcMs = +new Date(now.toLocaleString('en-US', {timeZone: 'UTC'}));
+  return (nyMs - utcMs) / 3600000;
+}
+
+function msUntilNextH41() {
+  const now      = new Date();
+  const etOffset = getETOffset();
+  const etMs     = now.getTime() + etOffset * 3600000;
+  const etDate   = new Date(etMs);
+  const dayET    = etDate.getUTCDay();
+  const hourET   = etDate.getUTCHours();
+  const minET    = etDate.getUTCMinutes();
+  let daysUntil  = (4 - dayET + 7) % 7;
+  if (daysUntil === 0 && (hourET > 16 || (hourET === 16 && minET >= 30))) daysUntil = 7;
+  const targetEtDate = new Date(etMs + daysUntil * 86400000);
+  targetEtDate.setUTCHours(16, 30, 0, 0);
+  return targetEtDate.getTime() - etOffset * 3600000 - now.getTime();
 }
 
 function getNextFiveMinuteMark() {
@@ -1267,6 +1432,298 @@ function loadLevels() {
     });
 }
 
+// ── INTRADAY HELPERS ──────────────────────────────
+function intradayBiasClass(bias) {
+  if (!bias) return "mixed";
+  const u = bias.toUpperCase();
+  if (u.includes("BULL")) return "bull";
+  if (u.includes("BEAR") || u.includes("CONTINUATION")) return "bear";
+  return "mixed";
+}
+function confidenceClass(conf) {
+  if (!conf) return "ghost";
+  const u = conf.toUpperCase();
+  if (u === "HIGH")     return "bull";
+  if (u === "MODERATE") return "mixed";
+  return "bear";
+}
+function entropyClass(s) {
+  if (s === "STABLE")   return "bull";
+  if (s === "CRITICAL") return "bear";
+  return "ghost";
+}
+function gammaRegClass(r) {
+  if (r === "POSITIVE")  return "bull";
+  if (r === "NEGATIVE")  return "bear";
+  if (r === "NEAR_FLIP") return "mixed";
+  return "ghost";
+}
+
+// ── RENDER INTRADAY ────────────────────────────────
+function renderIntraday(d) {
+  const app = document.getElementById("intraday-app");
+  clearEl(app);
+
+  // AIR POCKET WATCH banner
+  if (d.air_pocket_watch) {
+    const banner = el("div", {className:"air-pocket-banner"});
+    banner.appendChild(el("div", {className:"apw-icon"}, "⚡"));
+    const bText = el("div", {style:{flex:"1"}});
+    bText.appendChild(el("div", {className:"apw-title"},
+      "AIR POCKET WATCH" + (d.air_pocket_type ? "  ·  " + d.air_pocket_type : "")));
+    if (d.reason) bText.appendChild(el("div", {className:"apw-desc"}, d.reason));
+    banner.appendChild(bText);
+    app.appendChild(banner);
+  }
+
+  // Hero
+  const biasClass = intradayBiasClass(d.intraday_bias);
+  const hero = el("div", {className:"iday-hero " + biasClass});
+  const heroL = el("div");
+  heroL.appendChild(el("div", {className:"hero-eyebrow"}, "Intraday NQ Bias"));
+  heroL.appendChild(el("div", {className:"iday-label " + biasClass}, d.intraday_bias || "UNKNOWN"));
+  heroL.appendChild(el("span", {className:"iday-conf " + confidenceClass(d.confidence)},
+    d.confidence || "—"));
+  if (d.reason && !d.air_pocket_watch) {
+    heroL.appendChild(el("div", {className:"iday-reason"}, d.reason));
+  }
+  hero.appendChild(heroL);
+  const heroR = el("div", {style:{textAlign:"right",flexShrink:"0"}});
+  heroR.appendChild(el("div", {className:"wlbl"}, "Updated"));
+  heroR.appendChild(el("div", {className:"wval"}, d.updated || "—"));
+  if (d.pred_date) {
+    heroR.appendChild(el("div", {className:"wlbl", style:{marginTop:"10px"}}, "Pred Date"));
+    heroR.appendChild(el("div", {className:"wval"}, d.pred_date));
+  }
+  hero.appendChild(heroR);
+  app.appendChild(hero);
+
+  // Intraday refresh bar
+  const iRefreshBar = el("div", {className:"lvl-refresh-status"});
+  iRefreshBar.appendChild(el("div", {id:"intraday-last-updated", className:"refresh-label"}, "Loading…"));
+  iRefreshBar.appendChild(el("div", {id:"intraday-refresh-countdown", className:"refresh-countdown"}, ""));
+  app.appendChild(iRefreshBar);
+
+  // Row 1: Entropy | Gamma Regime | GEX Dispersion
+  app.appendChild(secLbl("Market State"));
+  const row1 = el("div", {className:"g3"});
+
+  const entCard = card("Return Entropy Gate");
+  const entState = d.entropy_state || "UNKNOWN";
+  entCard.appendChild(el("div", {className:"iday-state-badge " + entropyClass(entState)}, entState));
+  entCard.appendChild(kv("H returns", d.H_returns != null ? d.H_returns.toFixed(4) : "—"));
+  entCard.appendChild(kv("Threshold (75th pctile)", d.H_threshold != null ? d.H_threshold.toFixed(4) : "—"));
+  if (entState === "CRITICAL") {
+    entCard.appendChild(el("div", {className:"interp"},
+      "CRITICAL: high entropy = chaotic price action. Hard NO_BIAS gate active."));
+  }
+  row1.appendChild(entCard);
+
+  const gamCard = card("Gamma Regime");
+  const gamReg = d.gamma_regime || "UNKNOWN";
+  gamCard.appendChild(el("div", {className:"iday-state-badge " + gammaRegClass(gamReg)}, gamReg));
+  gamCard.appendChild(kv("NQ Price", d.nq_price != null ?
+    d.nq_price.toLocaleString("en-US", {minimumFractionDigits:1, maximumFractionDigits:1}) : "—"));
+  gamCard.appendChild(kv("γ Flip", d.gamma_flip != null ?
+    d.gamma_flip.toLocaleString("en-US", {minimumFractionDigits:1, maximumFractionDigits:1}) : "—"));
+  if (d.nq_price != null && d.gamma_flip != null) {
+    const diff = d.nq_price - d.gamma_flip;
+    gamCard.appendChild(kv("vs Flip",
+      (diff >= 0 ? "+" : "") + diff.toFixed(1) + " pts",
+      {color: diff >= 0 ? "var(--bull)" : "var(--bear)"}));
+  }
+  row1.appendChild(gamCard);
+
+  const gexCard = card("GEX Dispersion");
+  const hgex = d.H_GEX_norm != null ? d.H_GEX_norm : 0.5;
+  const hgexColor = hgex > 0.6 ? "var(--mixed)" : hgex < 0.3 ? "var(--bull)" : "var(--muted)";
+  gexCard.appendChild(el("div", {className:"dirb", style:{color:hgexColor, fontSize:"28px"}},
+    hgex.toFixed(3)));
+  gexCard.appendChild(el("div", {style:{color:"var(--ghost)",fontSize:"10px",marginBottom:"8px"}},
+    "H_GEX_norm · 0=concentrated, 1=dispersed"));
+  const hbarW = el("div", {className:"pbar-w"});
+  const hfill = el("div", {className:"pbar"});
+  hfill.style.width = (hgex * 100) + "%";
+  hfill.style.background = hgex > 0.6 ? "var(--mixed)" : "var(--bull)";
+  hbarW.appendChild(hfill);
+  gexCard.appendChild(hbarW);
+  if (hgex > 0.6) {
+    gexCard.appendChild(el("div", {className:"interp", style:{marginTop:"8px"}},
+      "Dispersed GEX: confidence penalized ×0.7"));
+  } else {
+    gexCard.appendChild(kv("Wall concentration", hgex < 0.3 ? "High" : "Moderate"));
+  }
+  row1.appendChild(gexCard);
+  app.appendChild(row1);
+
+  // Row 2: PCA + Top Wall
+  app.appendChild(secLbl("Price Structure"));
+  const row2 = el("div", {className:"g2"});
+
+  const pcaCard = card("PCA Price Structure");
+  [
+    {key:"PC1 · trend",       val:d.PC1},
+    {key:"PC2 · curvature",   val:d.PC2},
+    {key:"PC3 · vol regime",  val:d.PC3},
+  ].forEach(function(p) {
+    if (p.val == null) return;
+    pcaCard.appendChild(kv(p.key,
+      (p.val > 0 ? "+" : "") + p.val.toFixed(4),
+      {color: p.val > 0 ? "var(--bull)" : "var(--bear)", fontWeight:"500"}));
+    const pw = el("div", {className:"pbar-w", style:{marginBottom:"6px"}});
+    const pf = el("div", {className:"pbar " + (p.val > 0 ? "bull" : "bear")});
+    pf.style.width = Math.min(100, Math.abs(p.val) * 30) + "%";
+    pw.appendChild(pf);
+    pcaCard.appendChild(pw);
+  });
+  if (d.pca_fit_date) {
+    pcaCard.appendChild(kv("PCA fit date", d.pca_fit_date, {color:"var(--ghost)"}));
+  }
+  row2.appendChild(pcaCard);
+
+  const tw = d.top_wall;
+  const twCard = card("Top Wall");
+  if (tw) {
+    const isBull = (tw.net_gex || 0) < 0;
+    const wallColor = isBull ? "var(--bull)" : "var(--bear)";
+    twCard.appendChild(el("div", {className:"dirb", style:{color:wallColor, fontSize:"22px"}},
+      tw.strike_futures != null ? tw.strike_futures.toFixed(1) : "—"));
+    const twTypeWrap = el("div", {style:{marginBottom:"8px"}});
+    twTypeWrap.appendChild(el("span", {className:"type-tag " + (isBull ? "bull" : "bear")},
+      tw.type || ""));
+    twCard.appendChild(twTypeWrap);
+    twCard.appendChild(kv("Score", tw.score != null ? tw.score.toFixed(1) : "—"));
+    twCard.appendChild(kv("Distance", tw.dist_nq != null ? fmtDist(tw.dist_nq) + " pts" : "—"));
+    twCard.appendChild(kv("Proximity score", tw.proximity_score != null ? tw.proximity_score.toFixed(2) : "—"));
+    twCard.appendChild(kv("Net GEX", fmtGex(tw.net_gex)));
+    twCard.appendChild(kv("Net Vanna", fmtGex(tw.net_vex)));
+  } else {
+    twCard.appendChild(el("div", {className:"lvl-empty"}, "No wall data"));
+  }
+  row2.appendChild(twCard);
+  app.appendChild(row2);
+
+  // MM Intensification
+  app.appendChild(secLbl("MM Intensification · Today"));
+  const mm = d.mm_intensification || [];
+  const mmCard = el("div", {className:"card", style:{padding:"0",overflow:"hidden",animationDelay:"0.15s"}});
+  if (mm.length === 0) {
+    mmCard.appendChild(el("div", {className:"lvl-empty"},
+      "No log data — freeflow_logger.py needs ≥2 snapshots today"));
+  } else {
+    const scroll = el("div", {style:{overflowX:"auto"}});
+    const tbl = el("table", {className:"lvl-full-tbl"});
+    const thead = el("thead");
+    const htr = el("tr");
+    ["Strike", "GEX Snap1", "GEX Snap2", "Δ GEX", "Score", "Direction"].forEach(function(h) {
+      htr.appendChild(el("th", {}, h));
+    });
+    thead.appendChild(htr);
+    tbl.appendChild(thead);
+    const tbody2 = el("tbody");
+    mm.forEach(function(m) {
+      const tr = el("tr");
+      const dc2 = m.direction === "BUILDING_NEGATIVE" ? "bear" : "bull";
+      tr.appendChild(el("td", {style:{fontWeight:"500"}}, m.strike_futures.toFixed(1)));
+      tr.appendChild(el("td", {style:{color:"var(--muted)"}}, fmtGex(m.gex_snap1)));
+      tr.appendChild(el("td", {style:{color:"var(--muted)"}}, fmtGex(m.gex_snap2)));
+      tr.appendChild(el("td", {style:{color: m.gex_delta >= 0 ? "var(--bull)" : "var(--bear)"}},
+        fmtGex(m.gex_delta)));
+      tr.appendChild(el("td", {}, m.intensification_score.toFixed(3)));
+      const dtd = el("td");
+      dtd.appendChild(el("span", {className:"type-tag " + dc2},
+        m.direction.replace("BUILDING_", "")));
+      tr.appendChild(dtd);
+      tbody2.appendChild(tr);
+    });
+    tbl.appendChild(tbody2);
+    scroll.appendChild(tbl);
+    mmCard.appendChild(scroll);
+  }
+  app.appendChild(mmCard);
+
+  // Macro context
+  app.appendChild(secLbl("Macro Context"));
+  const macroCtx = el("div", {className:"g2"});
+  const mcCard = card("Weekly Macro Bias");
+  const mbias = d.macro_bias || "UNKNOWN";
+  mcCard.appendChild(el("div", {className:"rname " + cc(mbias)}, mbias));
+  if (d.macro_regime && d.macro_regime.name) {
+    mcCard.appendChild(el("span", {className:"rscore"}, String(d.macro_regime.name)));
+  }
+  mcCard.appendChild(el("div", {className:"interp", style:{marginTop:"10px"}},
+    "Macro bias is a fixed prior modulating intraday confidence, not the primary signal."));
+  macroCtx.appendChild(mcCard);
+
+  const lvlCtxCard = card("Vol Regime");
+  const lvlReg = d.levels_regime || "UNKNOWN";
+  lvlCtxCard.appendChild(el("div", {className:"lvls-regime " + regimeClass(lvlReg)}, lvlReg));
+  lvlCtxCard.appendChild(kv("Classification",
+    lvlReg === "EXPANSION" ? "IV≥30 or RV/IV<0.5" :
+    lvlReg === "NEUTRAL"   ? "20≤IV<30" :
+    lvlReg === "CONTRACTION" ? "IV<20" : "—",
+    {color:"var(--ghost)", fontSize:"10px"}));
+  macroCtx.appendChild(lvlCtxCard);
+  app.appendChild(macroCtx);
+}
+
+// ── LOAD INTRADAY ──────────────────────────────────
+let intradayLoaded         = false;
+let intradayRefreshTimeout = null;
+let intradayCountdownTimer = null;
+let lastIntradayUpdate     = null;
+
+function updateIntradayStatus() {
+  const cdEl = document.getElementById("intraday-refresh-countdown");
+  const upEl = document.getElementById("intraday-last-updated");
+  if (!cdEl) return;
+  const remaining = getNextFiveMinuteMark() - Date.now();
+  cdEl.textContent = "Next refresh in " + formatDuration(remaining);
+  cdEl.style.color = "var(--text)";
+  if (upEl && lastIntradayUpdate) {
+    upEl.textContent = "Last updated " + formatTimeET(lastIntradayUpdate);
+  }
+}
+
+function scheduleIntradayRefresh() {
+  if (intradayRefreshTimeout) clearTimeout(intradayRefreshTimeout);
+  const ms = getNextFiveMinuteMark() - Date.now();
+  intradayRefreshTimeout = setTimeout(function() {
+    loadIntraday();
+    scheduleIntradayRefresh();
+  }, ms);
+}
+
+function startIntradayCountdown() {
+  if (intradayCountdownTimer) clearInterval(intradayCountdownTimer);
+  intradayCountdownTimer = setInterval(updateIntradayStatus, 1000);
+  updateIntradayStatus();
+}
+
+function loadIntraday() {
+  fetch("/.netlify/functions/intraday?_=" + Date.now())
+    .then(function(r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    })
+    .then(function(d) {
+      intradayLoaded     = true;
+      lastIntradayUpdate = new Date();
+      renderIntraday(d);
+      startIntradayCountdown();
+      scheduleIntradayRefresh();
+    })
+    .catch(function() {
+      if (!intradayLoaded) {
+        const app2 = document.getElementById("intraday-app");
+        clearEl(app2);
+        app2.appendChild(el("div", {className:"lvl-await"}, "Awaiting data…"));
+      }
+      startIntradayCountdown();
+      scheduleIntradayRefresh();
+    });
+}
+
 // ── INIT ──────────────────────────────────────────
 fetch("bias_output.json")
   .then(function(r) {
@@ -1286,6 +1743,7 @@ fetch("bias_output.json")
   });
 
 loadLevels();
+loadIntraday();
 initHashRouting();
 </script>
 

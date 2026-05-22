@@ -37,6 +37,13 @@ python scripts/05_weekly_report.py
 python scripts/06_check_accuracy.py   # compare predictions vs actuals afterward
 ```
 
+**Print formatted outlook from saved predictions:**
+```bash
+python run_weekly_outlook.py               # most recent week
+python run_weekly_outlook.py --date 2026-05-14  # specific week
+python run_weekly_outlook.py --pred path/to/predictions.csv
+```
+
 **FreeFlow options level calculator:**
 ```bash
 python freeflow_levels.py                         # single expiry snapshot
@@ -72,9 +79,14 @@ Raw price CSVs go in `data/raw/NQ/` and `data/raw/ES/` — scripts 01+ expect th
 data/raw/           ← NQ/ES OHLCV CSVs (daily, 4h, 1h, 15m, 5m, 1m per contract)
 data/processed/     ← outputs of scripts 01–08; inputs to weekly report
 models/             ← price_model.pkl, vol_model.pkl, price_features.pkl, all_features.pkl
+logs/               ← levels_YYYY-MM-DD.csv snapshots written by freeflow_logger.py
 ```
 
-**Macro regime scoring** (rules-based, not ML): each of 11 macro indicators (net Fed liquidity, VIX, DXY, 10Y yield, yield curve slope, VIX/VIX3M ratio) is scored +1/0/-1 by its percentile rank vs a rolling 156-week window. Total score maps to: RISK-ON (≥+3), LEAN RISK-ON (+1/+2), TRANSITION (0), LEAN RISK-OFF (-1/-2), RISK-OFF (≤-3).
+**Raw CSV format**: semicolon-separated, European number formatting (`.` as thousands separator, `,` as decimal). `scripts/01_data_prep.py` handles this via `sep=";", thousands=".", decimal=","`. First row is a header junk line and is skipped.
+
+**Processed CSV columns** (after `01_data_prep.py`): `date, symbol, open, high, low, close, volume` — date-indexed, one row per bar.
+
+**Macro regime scoring** (rules-based, not ML): each of 11 macro indicators (net Fed liquidity, VIX, DXY, 10Y yield, yield curve slope, VIX/VIX3M ratio) is scored +1/0/-1 by its percentile rank vs a rolling 156-week window. Total score maps to: RISK-ON (≥+3), LEAN RISK-ON (+1/+2), TRANSITION (0), LEAN RISK-OFF (-1/-2), RISK-OFF (≤-3). Historical percentile context is read from `data/processed/model_dataset_enriched.csv`.
 
 **XGBoost models**: `price_model` predicts weekly NQ direction (bull/bear probability); `vol_model` forecasts weekly realized vol. Both use a combined feature set of macro + price features; COT features are injected at prediction time.
 
@@ -82,17 +94,29 @@ models/             ← price_model.pkl, vol_model.pkl, price_features.pkl, all_
 - Layer 1: `scripts/` pipeline — macro regime + XGBoost directional model
 - Layer 2: `freeflow_levels.py` — options Greeks (GEX, VEX, CharmEX, DEX) scoring from FreeFlow API to identify NQ reversal levels. Vol regime (CONTRACTION/NEUTRAL/EXPANSION based on IV) adjusts weighting of Greeks.
 
+**`05_weekly_report.py --live` downloads fresh data from yfinance** — it does NOT read `NQ_daily_clean.csv`. The processed CSVs are only used by scripts 03 and 04 (training pipeline).
+
 ## Frontend Dashboard (Vanta)
 
-`index.html` — single-file static dashboard deployed to GitHub Pages. Two tabs:
-- **Bias**: displays `bias_output.json` (the weekly report output)
-- **Levels**: fetches live data via Netlify Function at `/api/levels`
+`index.html` — single-file static dashboard deployed on **Netlify** (not GitHub Pages). Both the static HTML and the serverless function are served by Netlify. Two tabs:
+- **Bias** (`#bias`): fetches `bias_output.json` as a static file (relative path)
+- **Levels** (`#levels`): fetches live data via `/.netlify/functions/levels`
 
-`netlify/functions/levels.js` — serverless function (zero external deps, Node built-ins only). Calls FreeFlow API using `FF_SESSION` env var set in Netlify dashboard, aggregates 3 nearest expiries, scores levels, returns JSON. Runs on each browser request; `Cache-Control: max-age=240` limits upstream calls.
+`netlify/functions/levels.js` — serverless function (zero external deps, Node built-ins only). Calls FreeFlow API using `FF_SESSION` env var set in Netlify dashboard, aggregates 3 nearest expiries, scores levels, returns JSON. Runs on each browser request; `Cache-Control: max-age=240` limits upstream calls. Key constants: `FILTER_PCT = 5.0` (only strikes within ±5% of futures price), `MIN_SCORE = 20.0`, QQQ-to-NQ conversion `ratio ≈ 41.14`.
 
 `netlify.toml` — publishes from `.` (root), functions from `netlify/functions/`, proxies `/api/*` → `/.netlify/functions/:splat`.
 
-**Updating `bias_output.json`**: run the weekly report with `--live`, then manually copy the JSON output into `bias_output.json` before committing.
+**`levels_data.json`** — a static snapshot in the repo root used for local development and debugging only. It is NOT auto-updated by any process. The live dashboard always calls the Netlify function.
+
+**`bias_output.json`** — updated manually: run the weekly report with `--live`, then copy the JSON output into this file and commit. Schema: `meta`, `confluence`, `macro_regime` (name, score, factor_scores), `price_model` (direction, probability), `vol_forecast`, `cot`, `vix_term_structure`, `key_levels`.
+
+**Dashboard JS architecture** (`index.html` script section):
+- All DOM construction uses the `el(tag, attrs, ...children)` helper — no framework, no template strings.
+- `kv(key, val, valStyle)` builds a labeled key-value row; `card(titleText, ...children)` builds a card with staggered fade-in animation.
+- `render(d)` consumes `bias_output.json`; `renderLevels(d)` consumes the levels API response.
+- The `HIST` array near the top of the script is **hardcoded** weekly prediction history (not read from a file) — update it manually when adding new weeks.
+- Tab routing uses URL hash (`#bias`, `#levels`); switching tabs calls `switchTab(name)`.
+- Color helpers: `cc(v)` → `"bull"/"bear"/"mixed"` CSS class from a regime/confluence string; `dc(v)` → `"bull"/"bear"` from a direction string.
 
 ## Key Constraints
 
