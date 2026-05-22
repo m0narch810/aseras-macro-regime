@@ -6,6 +6,7 @@ import pandas as pd
 import yfinance as yf
 import requests
 import pickle
+import json
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -423,6 +424,66 @@ def print_week(date, row, lv, save_list=None):
     print(f"  │ ► CONFLUENCE:  {confluence}")
     print(f"  └{'─'*55}")
 
+    # ── BUILD OUTPUT DICT ─────────────────────────────────────────
+    hist_vols  = nq_w["realized_vol"].dropna()
+    vol_pctile = int((hist_vols < vol_forecast).mean() * 100)
+    if vol_pctile >= 80:   vol_label = "HIGH VOL"
+    elif vol_pctile >= 60: vol_label = "ELEVATED VOL"
+    elif vol_pctile >= 40: vol_label = "NORMAL VOL"
+    else:                  vol_label = "LOW VOL"
+
+    result = {
+        "meta": {
+            "generated_at": datetime.today().strftime("%Y-%m-%d %H:%M"),
+            "week_start":   str(week_start),
+            "week_end":     str(week_end),
+            "instrument":   "NQ / ES Futures",
+        },
+        "confluence": confluence,
+        "macro_regime": {
+            "name":           regime,
+            "score":          int(macro_score),
+            "max_score":      11,
+            "bullish_inputs": bull_f,
+            "bearish_inputs": bear_f,
+            "factor_scores":  {k: int(v) for k, v in macro_details.items()},
+        },
+        "price_model": {
+            "direction":   price_dir,
+            "probability": round(float(price_prob), 2),
+        },
+        "vol_forecast": {
+            "weekly_vol_pct": round(float(vol_forecast) * 100, 1),
+            "percentile":    vol_pctile,
+            "label":         vol_label,
+        },
+        "cot": {
+            "as_of":                      str(cot_as_of),
+            "nq_lev_pctile":              round(float(nq_pctile), 4),
+            "nq_lev_wow":                 round(float(nq_wow),    4),
+            "es_asset_mgr_net_pct":       round(float(es_am_net), 4),
+            "lev_label":                  lev_label,
+            "positioning_interpretation": pos_interp,
+        },
+    }
+    if not (isinstance(ts_ratio, float) and np.isnan(ts_ratio)):
+        result["vix_term_structure"] = {
+            "vix_ratio": round(float(ts_ratio), 3),
+            "structure": "BACKWARDATION" if ts_ratio > 1.0 else "CONTANGO",
+            "mood":      "stress"        if ts_ratio > 1.0 else "calm",
+            "vvix":      round(float(ts_vvix), 1),
+            "ratio_wow": round(float(ts_wow),  3),
+            "direction": "rising"  if ts_wow > 0 else "falling",
+            "bias":      "bearish" if ts_wow > 0 else "bullish",
+        }
+    if lv is not None and not pd.isna(lv).all():
+        kl = {}
+        for _k in ["4w_high", "pw_high", "pw_close", "pw_mid",
+                   "pw_low",  "4w_low",  "atr_5d",   "atr_20d"]:
+            if _k in lv.index and not pd.isna(lv[_k]):
+                kl[_k] = round(float(lv[_k]), 2)
+        result["key_levels"] = kl
+
     if save_list is not None:
         save_list.append({
             "date": date, "regime": regime,
@@ -430,6 +491,7 @@ def print_week(date, row, lv, save_list=None):
             "price_prob": price_prob, "vol_forecast": vol_forecast,
             "confluence": confluence,
         })
+    return result
 
 # ── RUN ───────────────────────────────────────────────────────
 if LIVE_MODE:
@@ -440,7 +502,12 @@ if LIVE_MODE:
     # Show only the most recent week
     latest_date = combined.index[-1]
     lv = levels.loc[latest_date] if latest_date in levels.index else None
-    print_week(latest_date, combined.loc[latest_date], lv)
+    result = print_week(latest_date, combined.loc[latest_date], lv)
+
+    out_path = os.path.join(BASE_DIR, "bias_output.json")
+    with open(out_path, "w") as f:
+        json.dump(result, f, indent=2)
+    print(f"\n✓ bias_output.json updated → {out_path}")
 
 else:
     print("\n" + "="*60)
