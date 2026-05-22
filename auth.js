@@ -1,36 +1,41 @@
-// ─────────────────────────────────────────────────────────────
-//  CONFIG — must match the values in login.html exactly
-// ─────────────────────────────────────────────────────────────
-const SUPABASE_URL      = "PASTE_YOUR_SUPABASE_URL_HERE";
-const SUPABASE_ANON_KEY = "PASTE_YOUR_SUPABASE_ANON_KEY_HERE";
-// ─────────────────────────────────────────────────────────────
+// Hardcoded users for you and your friends
+const VALID_USERS = {
+  "awsame303": "pt$67143",
+  "friend2": "password456",
+  "friend3": "password789"
+};
 
-(function () {
-  const { createClient } = supabase;
-  const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Simple helper to check if someone is logged in
+function checkAuth() {
+  const session = localStorage.getItem("vanta_session");
+  const isLoginPage = window.location.pathname.includes("login.html");
 
-  // Block page immediately if no valid session.
-  // Hides content until auth check resolves.
-  document.documentElement.style.visibility = "hidden";
-
-  sb.auth.getSession().then(function ({ data }) {
-    if (!data.session) {
-      window.location.replace("login.html");
-    } else {
-      document.documentElement.style.visibility = "";
-    }
-  });
-
-  // Also listen for session expiry mid-session
-  sb.auth.onAuthStateChange(function (event) {
-    if (event === "SIGNED_OUT") {
-      window.location.replace("login.html");
-    }
-  });
-
-  // Exposed globally so the logout button in index.html can call it
-  window.vantaLogout = async function () {
-    await sb.auth.signOut();
+  if (!session && !isLoginPage) {
+    // Not logged in and trying to view index.html -> send to login
     window.location.replace("login.html");
-  };
-})();
+  } else if (session && isLoginPage) {
+    // Already logged in and trying to view login page -> send to index
+    window.location.replace("index.html");
+  }
+}
+
+// Handle the login form submission
+function vantaLogin(username, password) {
+  if (VALID_USERS[username] && VALID_USERS[username] === password) {
+    // Create a simple dummy session token
+    localStorage.setItem("vanta_session", btoa(username));
+    window.location.replace("index.html");
+    return true;
+  } else {
+    return false;
+  }
+}
+
+// Handle logging out
+function vantaLogout() {
+  localStorage.removeItem("vanta_session");
+  window.location.replace("login.html");
+}
+
+// Run the auth check automatically when the script loads
+checkAuth();

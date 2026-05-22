@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,300&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="auth.js"></script>
 <style>
 
 /* ── TOKENS (match index.html exactly) ───────────── */
@@ -135,7 +135,6 @@ body {
 .logo-b .alph { color: var(--bull); text-shadow: 0 0 14px var(--bull-glow); }
 
 /* ── GLITCH KEYFRAMES ────────────────────────────── */
-/* fires at 88–98% of each 7s cycle → ~every 7s, lasts ~0.7s */
 @keyframes glitch-main {
   0%, 87%, 100% { transform: none; }
   88%   { transform: translate(-2px, 0) skew(-0.5deg); }
@@ -181,7 +180,6 @@ body {
           clip-path: polygon(0 10%, 100% 10%, 100% 40%, 0 40%); }
 }
 
-/* second phase — different timing offset */
 @keyframes glitch-main-2 {
   0%, 42%, 48%, 100% { transform: none; }
   43%   { transform: translate(2px, -1px) skew(0.4deg); }
@@ -306,12 +304,12 @@ input:focus {
   </div>
 
   <div class="form-group">
-    <label for="email">email</label>
+    <label for="username">username</label>
     <input
-      type="email"
-      id="email"
-      placeholder="user@domain.com"
-      autocomplete="email"
+      type="text"
+      id="username"
+      placeholder="identity"
+      autocomplete="username"
       spellcheck="false"
       autocapitalize="none"
     >
@@ -333,57 +331,51 @@ input:focus {
 </div>
 
 <script>
-// ─────────────────────────────────────────────────────────────
-//  CONFIG — the site owner pastes their two Supabase values here
-// ─────────────────────────────────────────────────────────────
-const SUPABASE_URL      = "PASTE_YOUR_SUPABASE_URL_HERE";
-const SUPABASE_ANON_KEY = "PASTE_YOUR_SUPABASE_ANON_KEY_HERE";
-// ─────────────────────────────────────────────────────────────
+// Check session presence immediately on load via browser memory
+if (localStorage.getItem("vanta_session")) {
+  window.location.replace("index.html");
+}
 
-const { createClient } = supabase;
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-// If already logged in, skip straight to the app
-sb.auth.getSession().then(function({ data }) {
-  if (data.session) window.location.replace("index.html");
-});
-
-const emailEl = document.getElementById("email");
-const passEl  = document.getElementById("password");
-const btn     = document.getElementById("login-btn");
-const errEl   = document.getElementById("error-msg");
+const userEl = document.getElementById("username");
+const passEl = document.getElementById("password");
+const btn    = document.getElementById("login-btn");
+const errEl  = document.getElementById("error-msg");
 
 function showErr(msg) {
   errEl.textContent = msg;
   errEl.classList.add("visible");
 }
+
 function clearErr() {
   errEl.classList.remove("visible");
 }
 
 async function login() {
   clearErr();
-  const email    = emailEl.value.trim();
+  const username = userEl.value.trim();
   const password = passEl.value;
 
-  if (!email || !password) {
+  if (!username || !password) {
     showErr("please fill in all fields");
     return;
   }
 
-  btn.disabled        = true;
-  btn.textContent     = "authenticating…";
+  btn.disabled    = true;
+  btn.textContent = "authenticating…";
 
-  const { error } = await sb.auth.signInWithPassword({ email, password });
-
-  if (error) {
+  // Calls custom local verification routine in auth.js asynchronously
+  try {
+    const success = await vantaLogin(username, password);
+    if (!success) {
+      btn.disabled    = false;
+      btn.textContent = "sign in";
+      showErr("invalid credentials");
+    }
+  } catch (err) {
     btn.disabled    = false;
     btn.textContent = "sign in";
-    showErr("invalid credentials");
-    return;
+    showErr("authentication failed");
   }
-
-  window.location.replace("index.html");
 }
 
 btn.addEventListener("click", login);
@@ -391,11 +383,11 @@ btn.addEventListener("click", login);
 passEl.addEventListener("keydown", function(e) {
   if (e.key === "Enter") login();
 });
-emailEl.addEventListener("keydown", function(e) {
+userEl.addEventListener("keydown", function(e) {
   if (e.key === "Enter") passEl.focus();
 });
 
-emailEl.addEventListener("input", clearErr);
+userEl.addEventListener("input", clearErr);
 passEl.addEventListener("input",  clearErr);
 </script>
 
