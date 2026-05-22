@@ -81,6 +81,7 @@ function aggregateDataset(data) {
     strikes,
     futuresPrice: data.futures_price || 0,
     spotEtf:      data.etf_spot      || 0,
+    ratio:        data.ratio         || 41.14,
   };
 }
 
@@ -194,7 +195,7 @@ exports.handler = async (event) => {
       ctx.hv21        = vol.hv21        ?? null;
     } catch (_) {}
 
-    const { strikes, futuresPrice, spotEtf } = aggregateDataset(data);
+    const { strikes, futuresPrice, spotEtf, ratio } = aggregateDataset(data);
     const [regime, weights]                  = classifyRegime(ctx);
     const levels                             = scoreLevels(strikes, weights, futuresPrice);
     const gammaFlip                          = computeGammaFlip(strikes, futuresPrice);
@@ -211,6 +212,7 @@ exports.handler = async (event) => {
         updated:     updatedET,
         nq_price:    Math.round(futuresPrice * 10) / 10,
         qqq_price:   Math.round(spotEtf      * 100) / 100,
+        ratio:       Math.round(ratio        * 100) / 100,
         gamma_flip:  gammaFlip,
         regime,
         iv:          ctx.current_iv  != null ? Math.round(ctx.current_iv  * 10) / 10  : null,

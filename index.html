@@ -452,6 +452,14 @@ table.hist { width: 100%; border-collapse: collapse; font-size: 11px; }
   font-size: 11px; color: var(--muted);
   font-style: italic;
 }
+.interp.good {
+  background: var(--bull-dim); border-color: var(--bull-b);
+  color: var(--bull); font-style: normal;
+}
+.interp.bad {
+  background: var(--bear-dim); border-color: var(--bear-b);
+  color: var(--bear); font-style: normal;
+}
 
 /* ── FOOTER ──────────────────────────────────────── */
 footer {
@@ -1535,11 +1543,36 @@ function renderIntraday(d) {
   const entCard = card("Return Entropy Gate");
   const entState = d.entropy_state || "UNKNOWN";
   entCard.appendChild(el("div", {className:"iday-state-badge " + entropyClass(entState)}, entState));
-  entCard.appendChild(kv("H returns", d.H_returns != null ? d.H_returns.toFixed(4) : "—"));
-  entCard.appendChild(kv("Threshold (75th pctile)", d.H_threshold != null ? d.H_threshold.toFixed(4) : "—"));
+  entCard.appendChild(kv("H returns (20d)", d.H_returns != null ? d.H_returns.toFixed(3) : "—"));
+  entCard.appendChild(kv("Critical threshold", d.H_threshold != null ? d.H_threshold.toFixed(3) : "—"));
+  if (d.H_returns != null && d.H_threshold != null) {
+    const maxH = (Math.max(d.H_returns, d.H_threshold) * 1.18) || 1;
+    const eBar = el("div", {className:"pb-w"});
+    const eFill = el("div", {className:"pb-f"});
+    eFill.style.width = Math.min(100, d.H_returns / maxH * 100) + "%";
+    eFill.style.background = entState === "CRITICAL" ? "var(--bear)" : "var(--bull)";
+    const eMark = el("div", {className:"pb-m"});
+    eMark.style.left = Math.min(100, d.H_threshold / maxH * 100) + "%";
+    eBar.appendChild(eFill);
+    eBar.appendChild(eMark);
+    entCard.appendChild(eBar);
+    entCard.appendChild(el("div", {style:{fontSize:"8px",color:"var(--ghost)",marginBottom:"4px"}},
+      "fill = current entropy · marker = 75th-pctile threshold"));
+  }
   if (entState === "CRITICAL") {
+    entCard.appendChild(el("div", {className:"interp bad"},
+      "Disordered tape — entropy above the 252-day 75th-percentile. Options levels carry "
+      + "no directional edge; walls are unlikely to hold. Bias gated to NO_BIAS."));
+  } else if (entState === "STABLE") {
+    entCard.appendChild(el("div", {className:"interp good"},
+      "Orderly tape — entropy below threshold. Price is respecting structure: walls are "
+      + "likely to hold and fading extremes toward levels carries edge."));
+  } else {
     entCard.appendChild(el("div", {className:"interp"},
-      "CRITICAL: high entropy = chaotic price action. Hard NO_BIAS gate active."));
+      "Entropy unavailable — historical price feed unreachable. Gate inactive."));
+  }
+  if (d.price_source) {
+    entCard.appendChild(kv("Source", d.price_source + " daily", {color:"var(--ghost)",fontSize:"9px"}));
   }
   row1.appendChild(entCard);
 
@@ -1585,23 +1618,50 @@ function renderIntraday(d) {
   const row2 = el("div", {className:"g2"});
 
   const pcaCard = card("PCA Price Structure");
+  const exp = d.pca_explained || [];
+  let anyPC = false;
   [
-    {key:"PC1 · trend",       val:d.PC1},
-    {key:"PC2 · curvature",   val:d.PC2},
-    {key:"PC3 · vol regime",  val:d.PC3},
+    {key:"PC1 · trend / momentum", val:d.PC1, ex:exp[0]},
+    {key:"PC2 · curvature",        val:d.PC2, ex:exp[1]},
+    {key:"PC3 · vol regime",       val:d.PC3, ex:exp[2]},
   ].forEach(function(p) {
     if (p.val == null) return;
-    pcaCard.appendChild(kv(p.key,
-      (p.val > 0 ? "+" : "") + p.val.toFixed(4),
+    anyPC = true;
+    const lbl = p.key + (p.ex != null ? "  (" + p.ex + "% var)" : "");
+    pcaCard.appendChild(kv(lbl,
+      (p.val > 0 ? "+" : "") + p.val.toFixed(3),
       {color: p.val > 0 ? "var(--bull)" : "var(--bear)", fontWeight:"500"}));
-    const pw = el("div", {className:"pbar-w", style:{marginBottom:"6px"}});
+    const pw = el("div", {className:"pbar-w", style:{marginBottom:"8px"}});
     const pf = el("div", {className:"pbar " + (p.val > 0 ? "bull" : "bear")});
-    pf.style.width = Math.min(100, Math.abs(p.val) * 30) + "%";
+    pf.style.width = Math.min(100, Math.abs(p.val) * 25) + "%";
     pw.appendChild(pf);
     pcaCard.appendChild(pw);
   });
-  if (d.pca_fit_date) {
-    pcaCard.appendChild(kv("PCA fit date", d.pca_fit_date, {color:"var(--ghost)"}));
+  if (!anyPC) {
+    pcaCard.appendChild(el("div", {className:"interp"},
+      "PCA unavailable — historical price feed unreachable."));
+  } else {
+    const pc1 = d.PC1 || 0;
+    const ext = Math.abs(pc1);
+    let pcaMsg, pcaCls;
+    if (ext > 2.0) {
+      pcaMsg = (pc1 > 0 ? "Strongly extended upward" : "Strongly extended downward")
+        + " price structure — market is trending hard; levels are prone to break, not hold.";
+      pcaCls = "interp bad";
+    } else if (ext > 0.9) {
+      pcaMsg = (pc1 > 0 ? "Moderate upward" : "Moderate downward")
+        + " price structure — directional but not extreme; levels may hold with a directional skew.";
+      pcaCls = "interp";
+    } else {
+      pcaMsg = "Balanced / consolidating price structure — no dominant trend; "
+        + "levels are more likely to hold and contain price.";
+      pcaCls = "interp good";
+    }
+    pcaCard.appendChild(el("div", {className:pcaCls}, pcaMsg));
+    if (d.pca_n_samples) {
+      pcaCard.appendChild(kv("Fit window", d.pca_n_samples + " daily bars",
+        {color:"var(--ghost)", fontSize:"9px"}));
+    }
   }
   row2.appendChild(pcaCard);
 

@@ -98,11 +98,14 @@ logs/               ← levels_YYYY-MM-DD.csv snapshots written by freeflow_logg
 
 ## Frontend Dashboard (Vanta)
 
-`index.html` — single-file static dashboard deployed on **Netlify** (not GitHub Pages). Both the static HTML and the serverless function are served by Netlify. Two tabs:
-- **Bias** (`#bias`): fetches `bias_output.json` as a static file (relative path)
-- **Levels** (`#levels`): fetches live data via `/.netlify/functions/levels`
+`index.html` — single-file static dashboard deployed on **Netlify** (not GitHub Pages). Both the static HTML and the serverless functions are served by Netlify. Three tabs:
+- **Macro Bias** (`#bias`): fetches `bias_output.json` as a static file; shows a "Next H.4.1" countdown to the next Thursday 4:30 PM ET.
+- **Intraday Bias** (`#intraday`): fetches `/.netlify/functions/intraday`; auto-refreshes every 5 minutes (aligned to 5-min marks, same cadence as Levels).
+- **Levels** (`#levels`): fetches live data via `/.netlify/functions/levels`; auto-refreshes every 5 minutes.
 
 `netlify/functions/levels.js` — serverless function (zero external deps, Node built-ins only). Calls FreeFlow API using `FF_SESSION` env var set in Netlify dashboard, aggregates 3 nearest expiries, scores levels, returns JSON. Runs on each browser request; `Cache-Control: max-age=240` limits upstream calls. Key constants: `FILTER_PCT = 5.0` (only strikes within ±5% of futures price), `MIN_SCORE = 20.0`, QQQ-to-NQ conversion `ratio ≈ 41.14`.
+
+`netlify/functions/intraday.js` — **fully server-side** intraday bias classifier (zero npm deps). On each request it: (1) pulls live options data from FreeFlow; (2) pulls ~2y of daily OHLC from Yahoo Finance (`NQ=F`, falling back to `QQQ`) to compute the **return-entropy gate** (Shannon entropy of the 20-day return distribution vs a backward-looking 252-day 75th-pctile threshold → STABLE/CRITICAL) and **PCA price structure** (8 price features → StandardScaler → covariance → Jacobi eigendecomposition → PC1/PC2/PC3 + explained variance); (3) computes gamma regime, `H_GEX_norm`, top wall, FLIP_CROSS air-pocket detection; (4) fetches `bias_output.json` from its own deployment for macro context. CRITICAL entropy hard-gates the output to `NO_BIAS` — disordered tape = options levels carry no edge. The Python `scripts/09_intraday_bias.py` mirrors this logic for local backtesting (`scripts/10_validate_intraday.py`); the live dashboard does **not** depend on it.
 
 `netlify.toml` — publishes from `.` (root), functions from `netlify/functions/`, proxies `/api/*` → `/.netlify/functions/:splat`.
 
@@ -113,14 +116,14 @@ logs/               ← levels_YYYY-MM-DD.csv snapshots written by freeflow_logg
 **Dashboard JS architecture** (`index.html` script section):
 - All DOM construction uses the `el(tag, attrs, ...children)` helper — no framework, no template strings.
 - `kv(key, val, valStyle)` builds a labeled key-value row; `card(titleText, ...children)` builds a card with staggered fade-in animation.
-- `render(d)` consumes `bias_output.json`; `renderLevels(d)` consumes the levels API response.
+- `render(d)` consumes `bias_output.json`; `renderLevels(d)` consumes the levels API response; `renderIntraday(d)` consumes the intraday API response.
 - The `HIST` array near the top of the script is **hardcoded** weekly prediction history (not read from a file) — update it manually when adding new weeks.
-- Tab routing uses URL hash (`#bias`, `#levels`); switching tabs calls `switchTab(name)`.
+- Tab routing uses URL hash (`#bias`, `#intraday`, `#levels`); switching tabs calls `switchTab(name)`.
 - Color helpers: `cc(v)` → `"bull"/"bear"/"mixed"` CSS class from a regime/confluence string; `dc(v)` → `"bull"/"bear"` from a direction string.
 
 ## Key Constraints
 
-- **No intraday signals** — weekly timeframe only; runs once per week on Thursday.
+- **Layer 1 (macro) is weekly** — the XGBoost/macro pipeline runs once per week on Thursday. The Intraday Bias tab is a separate, independent layer driven by live options flow + entropy/PCA (see `netlify/functions/intraday.js`).
 - **COT data lag** — CFTC releases Tuesday data on Friday; `nq_lev_pctile` is sourced from `cot_NQ.csv` (historical), not the live COT feed.
 - **FreeFlow session expires** — if the Levels tab shows auth errors, update `FF_SESSION` in both `.env` (local) and the Netlify environment variable.
 - **VIX term structure display** — in `--live` mode, `vix_ratio` and `vvix` use the current unshifted values; historical weeks use the model-input (shifted-by-1-week) values to avoid lookahead.
