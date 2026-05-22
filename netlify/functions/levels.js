@@ -1,6 +1,7 @@
 const {
   BASE_HEADERS, isAuthorized, fetchJson,
-  todayET, aggregateDataset, computeGammaFlip, scoreLevels, classifyRegime,
+  todayET, aggregateDataset, computeGammaFlip, scoreLevels,
+  classifyVolRegime, getWeights,
 } = require('./lib/options');
 
 const SYMBOL   = 'QQQ';
@@ -38,9 +39,15 @@ exports.handler = async (event) => {
     } catch (_) {}
 
     const { strikes, futuresPrice, spotEtf, ratio } = aggregateDataset(data);
-    const [regime, weights] = classifyRegime(iv, rvIvRatio);
-    const levels            = scoreLevels(strikes, weights, futuresPrice);
-    const gammaFlip         = computeGammaFlip(strikes, futuresPrice);
+
+    // Compute flip + gamma regime first so weights can use both axes.
+    const gammaFlip   = computeGammaFlip(strikes, futuresPrice);
+    const diff        = futuresPrice != null && gammaFlip != null ? futuresPrice - gammaFlip : null;
+    const gammaRegime = diff == null ? 'UNKNOWN' : diff > 50 ? 'POSITIVE' : diff < -50 ? 'NEGATIVE' : 'NEAR_FLIP';
+
+    const volRegime = classifyVolRegime(iv, rvIvRatio);
+    const weights   = getWeights(volRegime, gammaRegime);
+    const levels    = scoreLevels(strikes, weights, futuresPrice);
 
     const updatedET = new Date().toLocaleString('en-US', {
       timeZone: 'America/New_York',
@@ -55,8 +62,9 @@ exports.handler = async (event) => {
         nq_price:    Math.round(futuresPrice * 10)  / 10,
         qqq_price:   Math.round(spotEtf      * 100) / 100,
         ratio:       Math.round(ratio        * 100) / 100,
-        gamma_flip:  gammaFlip,
-        regime,
+        gamma_flip:    gammaFlip,
+        gamma_regime:  gammaRegime,
+        vol_regime:    volRegime,
         iv:          iv          != null ? Math.round(iv          * 10)   / 10   : null,
         rv_iv_ratio: rvIvRatio   != null ? Math.round(rvIvRatio   * 1000) / 1000 : null,
         hv21:        hv21        != null ? Math.round(hv21        * 10)   / 10   : null,

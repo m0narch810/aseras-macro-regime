@@ -1,7 +1,8 @@
 const {
   BASE_HEADERS, isAuthorized, fetchJson, httpGetJson,
   AGENT_HEADERS, todayET,
-  aggregateDataset, computeGammaFlip, scoreLevels, classifyRegime,
+  aggregateDataset, computeGammaFlip, scoreLevels,
+  classifyVolRegime, getWeights,
 } = require('./lib/options');
 
 const SYMBOL   = 'QQQ';
@@ -277,14 +278,6 @@ function computeHGEXNorm(levels) {
   return Hmax > 0 ? Math.round(H / Hmax * 10000) / 10000 : 0.0;
 }
 
-function computeGammaRegime(nqPrice, gammaFlip) {
-  if (gammaFlip == null || nqPrice == null) return 'UNKNOWN';
-  const diff = nqPrice - gammaFlip;
-  if (diff >  NEAR_FLIP_BUFFER) return 'POSITIVE';
-  if (diff < -NEAR_FLIP_BUFFER) return 'NEGATIVE';
-  return 'NEAR_FLIP';
-}
-
 // Proximity-weighted top wall: scores each level by raw score × exp(-dist/halflife).
 function computeTopWall(levels, nqPrice) {
   if (!levels.length || nqPrice == null) return null;
@@ -297,7 +290,7 @@ function computeTopWall(levels, nqPrice) {
 }
 
 // ── INTRADAY CLASSIFIER ───────────────────────────────────────────────────────
-function classifyIntradayBias({ gammaRegime, gammaFlip, nqPrice, topWall, hGexNorm, macroBias, entropy, pca }) {
+function classifyIntradayBias({ gammaRegime, volRegime, gammaFlip, nqPrice, topWall, hGexNorm, macroBias, entropy, pca }) {
   if (entropy && entropy.entropy_state === 'CRITICAL') {
     return {
       intraday_bias:    'NO_BIAS',
@@ -379,6 +372,18 @@ function classifyIntradayBias({ gammaRegime, gammaFlip, nqPrice, topWall, hGexNo
   // Confidence modifiers
   const CONF_ORDER = ['LOW', 'MODERATE', 'HIGH'];
   const down = c => CONF_ORDER[Math.max(0, CONF_ORDER.indexOf(c) - 1)];
+  const up   = c => CONF_ORDER[Math.min(CONF_ORDER.length - 1, CONF_ORDER.indexOf(c) + 1)];
+
+  // Vol × gamma regime interaction
+  if (gammaRegime === 'NEGATIVE' && volRegime === 'EXPANSION') {
+    reason += ` EXPANSION vol + negative gamma: dealers short and IV expanding — moves are amplified, not dampened.`;
+    if (macroBearish) { conf = up(conf); reason += ` Macro confirms — all three axes bearish.`; }
+  } else if (gammaRegime === 'NEGATIVE' && volRegime === 'CONTRACTION') {
+    conf = down(conf);
+    reason += ` CONTRACTION vol with negative gamma is unusual — potential mean-reversion or sudden vol spike, reduce size.`;
+  } else if (gammaRegime === 'POSITIVE' && volRegime === 'CONTRACTION') {
+    reason += ` CONTRACTION vol + positive gamma: maximum pinning environment — GEX walls highly reliable.`;
+  }
 
   if (hGexNorm > H_GEX_CONFIDENCE_CUT) {
     conf = down(conf);
@@ -418,21 +423,24 @@ exports.handler = async (event) => {
     if (!data.rows || !data.rows.length) throw new Error('No rows — FF_SESSION may be expired.');
 
     const { strikes, futuresPrice, spotEtf } = aggregateDataset(data);
-    const gammaFlip = computeGammaFlip(strikes, futuresPrice);
 
-    // Vol regime — drives scoring weights (bug fix: was always using NEUTRAL weights).
+    // Compute flip + both regime axes before scoring — weights depend on both.
+    const gammaFlip  = computeGammaFlip(strikes, futuresPrice);
+    const flipDiff   = futuresPrice != null && gammaFlip != null ? futuresPrice - gammaFlip : null;
+    const gammaRegime = flipDiff == null ? 'UNKNOWN' : flipDiff > 50 ? 'POSITIVE' : flipDiff < -50 ? 'NEGATIVE' : 'NEAR_FLIP';
+
     let iv = null, rvIvRatio = null, hv21 = null;
     if (volData) {
       iv          = volData.current_iv  ?? null;
       rvIvRatio   = volData.rv_iv_ratio ?? null;
       hv21        = volData.hv21        ?? null;
     }
-    const [levelsRegime, weights] = classifyRegime(iv, rvIvRatio);
+    const levelsRegime = classifyVolRegime(iv, rvIvRatio);
+    const weights      = getWeights(levelsRegime, gammaRegime);
 
     const levels      = scoreLevels(strikes, weights, futuresPrice);
-    const H_GEX_norm  = computeHGEXNorm(levels);
-    const gammaRegime = computeGammaRegime(futuresPrice, gammaFlip);
-    const topWall     = computeTopWall(levels, futuresPrice);
+    const H_GEX_norm = computeHGEXNorm(levels);
+    const topWall    = computeTopWall(levels, futuresPrice);
 
     let entropy    = { entropy_state: 'UNKNOWN', H_returns: null, H_threshold: null };
     let pca        = { PC1: null, PC2: null, PC3: null, pca_explained: null, pca_n_samples: 0 };
@@ -450,7 +458,7 @@ exports.handler = async (event) => {
     }
 
     const result = classifyIntradayBias({
-      gammaRegime, gammaFlip, nqPrice: futuresPrice,
+      gammaRegime, volRegime: levelsRegime, gammaFlip, nqPrice: futuresPrice,
       topWall, hGexNorm: H_GEX_norm, macroBias, entropy, pca,
     });
 

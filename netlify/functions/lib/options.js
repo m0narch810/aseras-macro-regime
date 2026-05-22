@@ -10,13 +10,41 @@ const MIN_SCORE  = 20.0;
 const VALID_USERS        = ['aseras'];
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-// Regime-adaptive scoring weights.
-// EXPANSION (high IV / vol > RV): vanna/charm matter more than raw GEX.
-// CONTRACTION (low IV, pinning): GEX dominates dealer hedging.
+// Two-dimensional scoring weight table: [vol_regime][gamma_regime].
+//
+// Vol regime (IV-driven):
+//   EXPANSION   — high IV or RV/IV < 0.5: vanna/charm flows dominate dealer hedging
+//   NEUTRAL     — moderate IV: balanced GEX + vanna
+//   CONTRACTION — low IV, pinning: GEX is the dominant mean-reversion force
+//
+// Gamma regime (price vs flip):
+//   POSITIVE  — price > flip + 50pts: dealers long gamma, buy dips/sell rallies → walls hold
+//   NEAR_FLIP — within 50pts of flip: transitional, unstable hedging
+//   NEGATIVE  — price < flip − 50pts: dealers short gamma, amplify moves → walls break
+//
+// Interaction logic:
+//   POSITIVE gamma boosts GEX weight (pinning is real) and reduces VEX.
+//   NEGATIVE gamma cuts GEX (walls less reliable) and raises VEX + DAG.
+//   EXPANSION + NEGATIVE is the most dangerous combo — VEX dominates, moves are explosive.
+//   CONTRACTION + POSITIVE is maximum pinning — GEX alone drives 60% of the score.
+//
+// All rows sum to 1.00.
 const REGIME_WEIGHTS = {
-  EXPANSION:   { gex: 0.20, vex: 0.38, charmex: 0.17, oi: 0.15, dag: 0.10 },
-  NEUTRAL:     { gex: 0.32, vex: 0.28, charmex: 0.15, oi: 0.15, dag: 0.10 },
-  CONTRACTION: { gex: 0.50, vex: 0.15, charmex: 0.15, oi: 0.15, dag: 0.05 },
+  EXPANSION: {
+    POSITIVE:  { gex: 0.22, vex: 0.38, charmex: 0.17, oi: 0.14, dag: 0.09 },
+    NEAR_FLIP: { gex: 0.20, vex: 0.38, charmex: 0.17, oi: 0.15, dag: 0.10 },
+    NEGATIVE:  { gex: 0.10, vex: 0.48, charmex: 0.17, oi: 0.14, dag: 0.11 },
+  },
+  NEUTRAL: {
+    POSITIVE:  { gex: 0.42, vex: 0.22, charmex: 0.14, oi: 0.14, dag: 0.08 },
+    NEAR_FLIP: { gex: 0.32, vex: 0.28, charmex: 0.15, oi: 0.15, dag: 0.10 },
+    NEGATIVE:  { gex: 0.20, vex: 0.36, charmex: 0.14, oi: 0.16, dag: 0.14 },
+  },
+  CONTRACTION: {
+    POSITIVE:  { gex: 0.60, vex: 0.10, charmex: 0.14, oi: 0.14, dag: 0.02 },
+    NEAR_FLIP: { gex: 0.50, vex: 0.15, charmex: 0.15, oi: 0.15, dag: 0.05 },
+    NEGATIVE:  { gex: 0.36, vex: 0.24, charmex: 0.16, oi: 0.15, dag: 0.09 },
+  },
 };
 
 const AGENT_HEADERS = {
@@ -201,21 +229,24 @@ function scoreLevels(strikes, weights, futuresPrice) {
     .sort((a, b) => b.score - a.score);
 }
 
-// Maps IV / RV:IV ratio to a vol regime name and its scoring weight set.
-// Returns ['REGIME_NAME', weightsObject].
-function classifyRegime(iv, rvIvRatio) {
-  if (iv != null && (iv >= 30 || (rvIvRatio != null && rvIvRatio < 0.5)))
-    return ['EXPANSION',   REGIME_WEIGHTS.EXPANSION];
-  if (iv != null && iv >= 20)
-    return ['NEUTRAL',     REGIME_WEIGHTS.NEUTRAL];
-  if (iv != null)
-    return ['CONTRACTION', REGIME_WEIGHTS.CONTRACTION];
-  return ['NEUTRAL',       REGIME_WEIGHTS.NEUTRAL];
+// Maps IV / RV:IV ratio to a vol regime name string.
+function classifyVolRegime(iv, rvIvRatio) {
+  if (iv != null && (iv >= 30 || (rvIvRatio != null && rvIvRatio < 0.5))) return 'EXPANSION';
+  if (iv != null && iv >= 20) return 'NEUTRAL';
+  if (iv != null)             return 'CONTRACTION';
+  return 'NEUTRAL';
+}
+
+// Looks up the 2D weight table. gammaRegime defaults to NEAR_FLIP when unknown.
+function getWeights(volRegime, gammaRegime) {
+  const vr = REGIME_WEIGHTS[volRegime] || REGIME_WEIGHTS.NEUTRAL;
+  return vr[gammaRegime] || vr.NEAR_FLIP;
 }
 
 module.exports = {
   FILTER_PCT, MIN_SCORE, VALID_USERS, SESSION_MAX_AGE_MS,
   REGIME_WEIGHTS, AGENT_HEADERS, BASE_HEADERS,
   isAuthorized, fetchJson, httpGetJson, todayET,
-  aggregateDataset, computeGammaFlip, normalizeAbs, scoreLevels, classifyRegime,
+  aggregateDataset, computeGammaFlip, normalizeAbs, scoreLevels,
+  classifyVolRegime, getWeights,
 };
