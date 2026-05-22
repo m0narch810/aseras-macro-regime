@@ -992,7 +992,6 @@ function makeLvlRow(lvl) {
   const vexColor = lvl.net_vex > 0 ? "var(--bear)" : lvl.net_vex < 0 ? "var(--bull)" : "var(--muted)";
   const dexColor = lvl.net_dex > 0 ? "var(--bull)" : lvl.net_dex < 0 ? "var(--bear)" : "var(--muted)";
   const chmColor = lvl.net_charmex > 0 ? "var(--bull)" : lvl.net_charmex < 0 ? "var(--bear)" : "var(--muted)";
-  const vanColor = lvl.net_vegaex > 0 ? "var(--bull)" : lvl.net_vegaex < 0 ? "var(--bear)" : "var(--muted)";
   const dist = lvl.dist_nq;
   const distColor = dist > 0 ? "var(--bear)" : dist < 0 ? "var(--bull)" : "var(--muted)";
 
@@ -1012,7 +1011,6 @@ function makeLvlRow(lvl) {
   tr.appendChild(el("td", {style:{color:vexColor}}, fmtGex(lvl.net_vex)));
   tr.appendChild(el("td", {style:{color:dexColor}}, fmtGex(lvl.net_dex)));
   tr.appendChild(el("td", {style:{color:chmColor}}, fmtGex(lvl.net_charmex)));
-  tr.appendChild(el("td", {style:{color:vanColor}}, fmtGex(lvl.net_vegaex)));
   tr.appendChild(el("td", {style:{color:"var(--muted)"}},
     lvl.total_oi != null ? lvl.total_oi.toLocaleString() : "—"));
   return tr;
@@ -1024,10 +1022,9 @@ const LVL_COLS = [
   {key:"score",          lbl:"Score"},
   {key:"type",           lbl:"Type"},
   {key:"net_gex",        lbl:"GEX"},
-  {key:"net_vex",        lbl:"VEX"},
+  {key:"net_vex",        lbl:"Vanna"},
   {key:"net_dex",        lbl:"DEX"},
   {key:"net_charmex",    lbl:"Charm"},
-  {key:"net_vegaex",     lbl:"Vanna"},
   {key:"total_oi",       lbl:"OI"},
 ];
 
