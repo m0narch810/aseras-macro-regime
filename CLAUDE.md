@@ -125,6 +125,20 @@ logs/               ← levels_YYYY-MM-DD.csv snapshots written by freeflow_logg
 - Tab routing uses URL hash (`#bias`, `#intraday`, `#levels`); switching tabs calls `switchTab(name)`.
 - Color helpers: `cc(v)` → `"bull"/"bear"/"mixed"` CSS class from a regime/confluence string; `dc(v)` → `"bull"/"bear"` from a direction string.
 
+## Pending Improvements
+
+**Level scoring weights — derive from quant math, not hardcoded values**
+Currently `netlify/functions/lib/options.js` has a 3×3 static weight table (vol regime × gamma regime). These numbers are directionally reasonable but eyeballed. The correct approach is sensitivity-derived weights:
+
+```
+w_gex     ∝ |GEX_total| × σ_spot       (realized spot vol — already computed in PCA)
+w_vex     ∝ |VEX_total| × σ_IV         (vol-of-vol — VVIX from FreeFlow vol endpoint)
+w_charmex ∝ |CharmEX_total| × θ        (daily theta / time decay rate)
+w_dag     ∝ |DAG_total| × σ_spot
+```
+
+Normalize to sum to 1. This makes weights fully dynamic — computed live from current market state, no regime grid needed. All inputs are already available in `intraday.js` (Yahoo daily bars for σ_spot, FreeFlow vol endpoint for VVIX). Remove `REGIME_WEIGHTS` table from `lib/options.js` and replace `getWeights()` with this formula.
+
 ## Key Constraints
 
 - **Layer 1 (macro) is weekly** — the XGBoost/macro pipeline runs once per week on Thursday. The Intraday Bias tab is a separate, independent layer driven by live options flow + entropy/PCA (see `netlify/functions/intraday.js`).
