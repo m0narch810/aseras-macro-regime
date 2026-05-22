@@ -17,17 +17,21 @@ async function sha256Hex(str) {
 }
 
 // Returns the logged-in username if a valid, unexpired session exists.
+// Any stale, expired, or old-format token is purged so it cannot trigger
+// a redirect loop.
 function activeSession() {
   const raw = localStorage.getItem(SESSION_KEY);
   if (!raw) return null;
   try {
     const { user, ts } = JSON.parse(atob(raw));
-    if (!user || !VALID_USERS[user]) return null;
-    if (Date.now() - ts > SESSION_MAX_AGE_MS) return null;
-    return user;
+    if (user && VALID_USERS[user] && (Date.now() - ts) <= SESSION_MAX_AGE_MS) {
+      return user;
+    }
   } catch (e) {
-    return null;
+    /* malformed token — fall through to purge */
   }
+  localStorage.removeItem(SESSION_KEY);
+  return null;
 }
 
 // Redirects between login and dashboard based on session state.

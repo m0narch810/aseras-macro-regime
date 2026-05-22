@@ -331,10 +331,10 @@ input:focus {
 </div>
 
 <script>
-// Check session presence immediately on load via browser memory
-if (localStorage.getItem("vanta_session")) {
-  window.location.replace("index.html");
-}
+// NOTE: auth.js (loaded in <head>) already runs checkAuth(), which redirects
+// to index.html only when a *valid* session exists. A naive presence check
+// here previously caused an index.html <-> login.html redirect loop with
+// stale/old-format tokens, so it is intentionally not repeated.
 
 const userEl = document.getElementById("username");
 const passEl = document.getElementById("password");
