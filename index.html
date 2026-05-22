@@ -990,12 +990,13 @@ function makeLvlRow(lvl) {
   const tr = el("tr");
   const gexColor = lvl.net_gex > 0 ? "var(--bear)" : lvl.net_gex < 0 ? "var(--bull)" : "var(--muted)";
   const vexColor = lvl.net_vex > 0 ? "var(--bear)" : lvl.net_vex < 0 ? "var(--bull)" : "var(--muted)";
+  const dexColor = lvl.net_dex > 0 ? "var(--bull)" : lvl.net_dex < 0 ? "var(--bear)" : "var(--muted)";
+  const chmColor = lvl.net_charmex > 0 ? "var(--bull)" : lvl.net_charmex < 0 ? "var(--bear)" : "var(--muted)";
+  const vanColor = lvl.net_vegaex > 0 ? "var(--bull)" : lvl.net_vegaex < 0 ? "var(--bear)" : "var(--muted)";
   const dist = lvl.dist_nq;
   const distColor = dist > 0 ? "var(--bear)" : dist < 0 ? "var(--bull)" : "var(--muted)";
 
   tr.appendChild(el("td", {style:{color:"var(--text)",fontWeight:"500"}},
-    lvl.strike_futures != null ? lvl.strike_futures.toFixed(1) : "—"));
-  tr.appendChild(el("td", {style:{color:"var(--muted)"}},
     lvl.strike_etf != null ? lvl.strike_etf.toFixed(2) : "—"));
   tr.appendChild(el("td", {style:{color:distColor}},
     dist != null ? fmtDist(dist) : "—"));
@@ -1009,19 +1010,24 @@ function makeLvlRow(lvl) {
 
   tr.appendChild(el("td", {style:{color:gexColor}}, fmtGex(lvl.net_gex)));
   tr.appendChild(el("td", {style:{color:vexColor}}, fmtGex(lvl.net_vex)));
+  tr.appendChild(el("td", {style:{color:dexColor}}, fmtGex(lvl.net_dex)));
+  tr.appendChild(el("td", {style:{color:chmColor}}, fmtGex(lvl.net_charmex)));
+  tr.appendChild(el("td", {style:{color:vanColor}}, fmtGex(lvl.net_vegaex)));
   tr.appendChild(el("td", {style:{color:"var(--muted)"}},
     lvl.total_oi != null ? lvl.total_oi.toLocaleString() : "—"));
   return tr;
 }
 
 const LVL_COLS = [
-  {key:"strike_futures", lbl:"NQ Strike"},
-  {key:"strike_etf",     lbl:"QQQ Strike"},
+  {key:"strike_etf",     lbl:"QQQ"},
   {key:"dist_nq",        lbl:"Dist"},
   {key:"score",          lbl:"Score"},
   {key:"type",           lbl:"Type"},
   {key:"net_gex",        lbl:"GEX"},
   {key:"net_vex",        lbl:"VEX"},
+  {key:"net_dex",        lbl:"DEX"},
+  {key:"net_charmex",    lbl:"Charm"},
+  {key:"net_vegaex",     lbl:"Vanna"},
   {key:"total_oi",       lbl:"OI"},
 ];
 
@@ -1106,17 +1112,18 @@ function renderLevels(d) {
 
   hdr.appendChild(stat("Updated", d.updated || "—"));
 
-  hdr.appendChild(stat("NQ",
-    d.nq_price != null
-      ? d.nq_price.toLocaleString("en-US", {minimumFractionDigits:1, maximumFractionDigits:1})
-      : "—"));
-
   hdr.appendChild(stat("QQQ",
     d.qqq_price != null ? d.qqq_price.toFixed(2) : "—"));
 
   const regBadge = el("span", {className:"lvls-regime " + regimeClass(d.regime)},
     String(d.regime || "—"));
   hdr.appendChild(stat("Regime", regBadge));
+
+  const gfColor = (d.gamma_flip != null)
+    ? "var(--mixed)" : "var(--ghost)";
+  const gfSpan = el("span", {style:{color:gfColor, fontWeight:"700"}},
+    d.gamma_flip != null ? d.gamma_flip.toLocaleString("en-US", {minimumFractionDigits:1, maximumFractionDigits:1}) : "—");
+  hdr.appendChild(stat("γ Flip (NQ)", gfSpan));
 
   hdr.appendChild(stat("IV",
     d.iv != null ? d.iv.toFixed(1) + "%" : "—"));
@@ -1144,7 +1151,7 @@ function renderLevels(d) {
                            .sort(function(a, b) { return b.score - a.score; });
 
   app.appendChild(secLbl("Gamma Panels"));
-  const g2 = el("div", {className:"g2"});
+  const panels = el("div", {style:{display:"flex",flexDirection:"column",gap:"10px"}});
 
   function panelCard(titleColor, titleText, rows) {
     const c = el("div", {className:"card", style:{padding:"0",overflow:"hidden",animationDelay:"0.05s"}});
@@ -1163,9 +1170,9 @@ function renderLevels(d) {
     return c;
   }
 
-  g2.appendChild(panelCard("var(--bull)", "Support · Put Walls",   support));
-  g2.appendChild(panelCard("var(--bear)", "Resistance · Call Walls", resistance));
-  app.appendChild(g2);
+  panels.appendChild(panelCard("var(--bear)", "Resistance · Call Walls", resistance));
+  panels.appendChild(panelCard("var(--bull)", "Support · Put Walls",     support));
+  app.appendChild(panels);
 
   // ── ALL LEVELS TABLE ──
   app.appendChild(secLbl("All Levels"));

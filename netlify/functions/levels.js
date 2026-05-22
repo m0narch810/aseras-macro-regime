@@ -65,12 +65,14 @@ function aggregateDataset(data) {
       : Math.round(etf * ratio * 10) / 10;
 
     if (!strikes[sf]) {
-      strikes[sf] = { strike_etf: etf, net_gex: 0, net_vex: 0, net_charmex: 0, net_dag: 0, total_oi: 0 };
+      strikes[sf] = { strike_etf: etf, net_gex: 0, net_vex: 0, net_charmex: 0, net_dex: 0, net_vegaex: 0, net_dag: 0, total_oi: 0 };
     }
     const s = strikes[sf];
     s.net_gex     += row.gex     || 0;
     s.net_vex     += row.vex     || 0;
     s.net_charmex += row.charmex || 0;
+    s.net_dex     += row.dex     || 0;
+    s.net_vegaex  += row.vegaex  || 0;
     s.net_dag     += row.dag     || 0;
     s.total_oi    += row.oi      || 0;
   }
@@ -80,6 +82,22 @@ function aggregateDataset(data) {
     futuresPrice: data.futures_price || 0,
     spotEtf:      data.etf_spot      || 0,
   };
+}
+
+// ── GAMMA FLIP ────────────────────────────────────────────────
+function computeGammaFlip(strikes) {
+  const sorted = Object.entries(strikes)
+    .map(([sf, s]) => ({ strike: +sf, gex: s.net_gex }))
+    .sort((a, b) => b.strike - a.strike); // descending: high → low
+
+  let cumGex = 0;
+  for (const row of sorted) {
+    const prev = cumGex;
+    cumGex += row.gex;
+    if (prev > 0 && cumGex <= 0) return Math.round(row.strike * 10) / 10;
+    if (prev < 0 && cumGex >= 0) return Math.round(row.strike * 10) / 10;
+  }
+  return null;
 }
 
 // ── REGIME ────────────────────────────────────────────────────
@@ -129,6 +147,8 @@ function scoreLevels(strikes, weights, futuresPrice) {
         net_gex:        Math.round(r.net_gex),
         net_vex:        Math.round(r.net_vex),
         net_charmex:    Math.round(r.net_charmex),
+        net_dex:        Math.round(r.net_dex),
+        net_vegaex:     Math.round(r.net_vegaex),
         total_oi:       Math.round(r.total_oi),
       };
     })
@@ -160,16 +180,20 @@ exports.handler = async (event) => {
     const { strikes, futuresPrice, spotEtf } = aggregateDataset(data);
     const [regime, weights]                  = classifyRegime(ctx);
     const levels                             = scoreLevels(strikes, weights, futuresPrice);
+    const gammaFlip                          = computeGammaFlip(strikes);
 
-    const r = v => v != null ? Math.round(v * 1000) / 1000 : null;
+    const updatedET = new Date().toLocaleString('en-US', {
+      timeZone: 'America/New_York',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    }) + ' ET';
 
     return {
       statusCode: 200,
       headers:    OUT_HEADERS,
       body: JSON.stringify({
-        updated:     new Date().toISOString().replace('T', ' ').slice(0, 16) + ' ET',
-        nq_price:    Math.round(futuresPrice * 10) / 10,
+        updated:     updatedET,
         qqq_price:   Math.round(spotEtf      * 100) / 100,
+        gamma_flip:  gammaFlip,
         regime,
         iv:          ctx.current_iv  != null ? Math.round(ctx.current_iv  * 10) / 10  : null,
         rv_iv_ratio: ctx.rv_iv_ratio != null ? Math.round(ctx.rv_iv_ratio * 1000) / 1000 : null,
