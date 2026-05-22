@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,300&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="auth.js"></script>
 <style>
 
 /* ── TOKENS ──────────────────────────────────────── */
@@ -133,6 +135,25 @@ header {
   animation: blink 2.4s ease-in-out infinite;
 }
 @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.18; } }
+
+/* ── LOGOUT BUTTON ───────────────────────────────── */
+.logout-btn {
+  font-family: 'Syne', sans-serif;
+  font-size: 7.5px;
+  letter-spacing: 0.2em;
+  color: var(--ghost);
+  background: none;
+  border: 1px solid var(--border);
+  padding: 5px 13px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  outline: none;
+  text-transform: lowercase;
+}
+.logout-btn:hover {
+  color: var(--text);
+  border-color: var(--border-hi);
+}
 
 /* ── TABS ────────────────────────────────────────── */
 .tab-bar {
@@ -608,6 +629,7 @@ footer .alph { color: rgba(255,255,255,0.55); }
     <div class="header-right">
       <div class="hdr-tag" id="meta-ts"></div>
       <div class="live-dot">Live</div>
+      <button class="logout-btn" onclick="vantaLogout()">sign out</button>
     </div>
   </header>
 
@@ -1108,12 +1130,10 @@ function renderLevels(d) {
   }
 
   hdr.appendChild(stat("Updated", d.updated || "—"));
-
   hdr.appendChild(stat("NQ",
     d.nq_price != null
       ? d.nq_price.toLocaleString("en-US", {minimumFractionDigits:1, maximumFractionDigits:1})
       : "—"));
-
   hdr.appendChild(stat("QQQ",
     d.qqq_price != null ? d.qqq_price.toFixed(2) : "—"));
 
@@ -1121,8 +1141,7 @@ function renderLevels(d) {
     String(d.regime || "—"));
   hdr.appendChild(stat("Regime", regBadge));
 
-  const gfColor = (d.gamma_flip != null)
-    ? "var(--mixed)" : "var(--ghost)";
+  const gfColor = (d.gamma_flip != null) ? "var(--mixed)" : "var(--ghost)";
   const gfSpan = el("span", {style:{color:gfColor, fontWeight:"700"}},
     d.gamma_flip != null ? d.gamma_flip.toLocaleString("en-US", {minimumFractionDigits:1, maximumFractionDigits:1}) : "—");
   hdr.appendChild(stat("γ Flip (NQ)", gfSpan));
