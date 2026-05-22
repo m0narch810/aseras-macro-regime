@@ -186,6 +186,11 @@ exports.handler = async (event) => {
       ctx.hv21        = vol.hv21        ?? null;
     } catch (_) {}
 
+    // DEBUG — expose all top-level FreeFlow fields (remove after gamma flip confirmed)
+    const _ffMeta = Object.fromEntries(
+      Object.entries(data).filter(([k]) => k !== 'rows')
+    );
+
     const { strikes, futuresPrice, spotEtf } = aggregateDataset(data);
     const [regime, weights]                  = classifyRegime(ctx);
     const levels                             = scoreLevels(strikes, weights, futuresPrice);
@@ -209,6 +214,7 @@ exports.handler = async (event) => {
         rv_iv_ratio: ctx.rv_iv_ratio != null ? Math.round(ctx.rv_iv_ratio * 1000) / 1000 : null,
         hv21:        ctx.hv21        != null ? Math.round(ctx.hv21        * 10) / 10  : null,
         levels,
+        _ff: _ffMeta,
       }),
     };
 
