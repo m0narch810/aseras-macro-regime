@@ -1,65 +1,73 @@
 {
   "meta": {
-    "generated_at": "2026-05-20 15:54",
-    "week_start": "2026-05-14",
-    "week_end": "2026-05-20",
+    "generated_at": "2026-05-22 21:49",
+    "week_start": "2026-05-15",
+    "week_end": "2026-05-21",
     "instrument": "NQ / ES Futures"
   },
-  "confluence": "STRONG BEAR",
+  "confluence": "LEAN BEAR",
   "macro_regime": {
-    "name": "RISK-OFF",
-    "score": -3,
+    "name": "LEAN RISK-OFF",
+    "score": -2,
     "max_score": 11,
-    "bullish_inputs": ["dxy_wow", "yield_curve_wow"],
-    "bearish_inputs": ["net_liq_wow", "vix_wow", "vix_4w", "us10y_wow", "us10y_4w"],
+    "bullish_inputs": [
+      "net_liq_wow",
+      "vix_4w"
+    ],
+    "bearish_inputs": [
+      "net_liq_4w",
+      "us10y_4w",
+      "yield_curve_wow",
+      "yield_curve_4w"
+    ],
     "factor_scores": {
-      "net_liq_wow": -1,
-      "net_liq_4w":   0,
-      "vix_wow":     -1,
-      "vix_4w":      -1,
-      "us10y_wow":   -1,
-      "us10y_4w":    -1,
-      "dxy_wow":      1,
-      "dxy_4w":       0,
-      "yield_curve_wow": 1,
-      "yield_curve_4w":  0,
-      "vix_ratio_wow":   0
+      "net_liq_wow": 1,
+      "net_liq_4w": -1,
+      "vix_wow": 0,
+      "vix_4w": 1,
+      "dxy_wow": 0,
+      "dxy_4w": 0,
+      "us10y_wow": 0,
+      "us10y_4w": -1,
+      "yield_curve_wow": -1,
+      "yield_curve_4w": -1,
+      "vix_ratio_wow": 0
     }
   },
   "price_model": {
-    "direction": "BULLISH",
-    "probability": 0.53
+    "direction": "BEARISH",
+    "probability": 0.48
   },
   "vol_forecast": {
-    "weekly_vol_pct": 2.0,
-    "percentile": 62,
-    "label": "NORMAL VOL"
+    "weekly_vol_pct": 1.4,
+    "percentile": 23,
+    "label": "LOW VOL"
   },
   "cot": {
-    "as_of": "2026-05-13",
-    "nq_lev_pctile": 0.42,
-    "nq_lev_wow": -0.0031,
-    "es_asset_mgr_net_pct": 0.087,
-    "lev_label": "NEUTRAL",
-    "positioning_interpretation": "NEUTRAL positioning — lev funds reducing slightly"
+    "as_of": "2026-05-12",
+    "nq_lev_pctile": 0.0,
+    "nq_lev_wow": 0.0228,
+    "es_asset_mgr_net_pct": 0.4861,
+    "lev_label": "EXTREME SHORT",
+    "positioning_interpretation": "EXTREME SHORT \u2014 covering, potential squeeze underway"
   },
   "vix_term_structure": {
-    "vix_ratio": 1.034,
-    "structure": "BACKWARDATION",
-    "mood": "stress",
-    "vvix": 96.4,
-    "ratio_wow": 0.028,
-    "direction": "rising",
-    "bias": "bearish"
+    "vix_ratio": 0.85,
+    "structure": "CONTANGO",
+    "mood": "calm",
+    "vvix": 93.4,
+    "ratio_wow": 0.0,
+    "direction": "falling",
+    "bias": "bullish"
   },
   "key_levels": {
-    "4w_high":  26045.50,
-    "pw_high":  25891.00,
-    "pw_close": 25658.25,
-    "pw_mid":   25458.00,
-    "pw_low":   25025.00,
-    "4w_low":   24887.75,
-    "atr_5d":   455.05,
-    "atr_20d":  398.51
+    "4w_high": 29782.0,
+    "pw_high": 29782.0,
+    "pw_close": 29687.75,
+    "pw_mid": 29161.5,
+    "pw_low": 28541.0,
+    "4w_low": 26440.0,
+    "atr_5d": 563.2,
+    "atr_20d": 491.68
   }
 }
