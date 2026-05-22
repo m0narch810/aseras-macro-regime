@@ -99,13 +99,17 @@ logs/               ← levels_YYYY-MM-DD.csv snapshots written by freeflow_logg
 ## Frontend Dashboard (Vanta)
 
 `index.html` — single-file static dashboard deployed on **Netlify** (not GitHub Pages). Both the static HTML and the serverless functions are served by Netlify. Three tabs:
-- **Macro Bias** (`#bias`): fetches `bias_output.json` as a static file; shows a "Next H.4.1" countdown to the next Thursday 4:30 PM ET.
+- **Macro Bias** (`#bias`): fetches `/.netlify/functions/bias`; shows a "Next update" countdown to the next Friday 5:00 PM ET (CFTC COT release).
 - **Intraday Bias** (`#intraday`): fetches `/.netlify/functions/intraday`; auto-refreshes every 5 minutes (aligned to 5-min marks, same cadence as Levels).
 - **Levels** (`#levels`): fetches live data via `/.netlify/functions/levels`; auto-refreshes every 5 minutes.
 
 `netlify/functions/levels.js` — serverless function (zero external deps, Node built-ins only). Calls FreeFlow API using `FF_SESSION` env var set in Netlify dashboard, aggregates 3 nearest expiries, scores levels, returns JSON. Runs on each browser request; `Cache-Control: max-age=240` limits upstream calls. Key constants: `FILTER_PCT = 5.0` (only strikes within ±5% of futures price), `MIN_SCORE = 20.0`, QQQ-to-NQ conversion `ratio ≈ 41.14`.
 
 `netlify/functions/intraday.js` — **fully server-side** intraday bias classifier (zero npm deps). On each request it: (1) pulls live options data from FreeFlow; (2) pulls ~2y of daily OHLC from Yahoo Finance (`NQ=F`, falling back to `QQQ`) to compute the **return-entropy gate** (Shannon entropy of the 20-day return distribution vs a backward-looking 252-day 75th-pctile threshold → STABLE/CRITICAL) and **PCA price structure** (8 price features → StandardScaler → covariance → Jacobi eigendecomposition → PC1/PC2/PC3 + explained variance); (3) computes gamma regime, `H_GEX_norm`, top wall, FLIP_CROSS air-pocket detection; (4) fetches `bias_output.json` from its own deployment for macro context. CRITICAL entropy hard-gates the output to `NO_BIAS` — disordered tape = options levels carry no edge. The Python `scripts/09_intraday_bias.py` mirrors this logic for local backtesting (`scripts/10_validate_intraday.py`); the live dashboard does **not** depend on it.
+
+`netlify/functions/bias.js` — serves the weekly macro bias. `bias_output.json` is bundled into the function via `require()` (esbuild inlines it at build time), so it works regardless of static-file serving.
+
+**Auth** — `login.html` + `auth.js` gate the dashboard (user `aseras`, password stored as a SHA-256 hash in `auth.js`). On login a session token (`btoa({user,ts})`) is stored in `localStorage` as `vanta_session`. All three data functions (`bias`, `levels`, `intraday`) require an `Authorization: Bearer <vanta_session>` header and return 401 without a valid, unexpired token. Note: the token is not server-signed, so it is forgeable by anyone who reads `auth.js` — adequate for a small trusted userbase, not for sensitive data.
 
 `netlify.toml` — publishes from `.` (root), functions from `netlify/functions/`, proxies `/api/*` → `/.netlify/functions/:splat`.
 

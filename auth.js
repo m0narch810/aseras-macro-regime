@@ -1,41 +1,61 @@
-// Hardcoded users for you and your friends
+// VANTA access control.
+// Passwords are stored as SHA-256 hashes — the plaintext never appears here.
 const VALID_USERS = {
-  "awsame303": "pt$67143",
-  "friend2": "password456",
-  "friend3": "password789"
+  // aseras
+  "aseras": "1df6106046101d8351881262131311974c170c7e12195cf3bbee3d210fded14e",
 };
 
-// Simple helper to check if someone is logged in
-function checkAuth() {
-  const session = localStorage.getItem("vanta_session");
-  const isLoginPage = window.location.pathname.includes("login.html");
+const SESSION_KEY = "vanta_session";
+const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
+// SHA-256 hex digest of a string (browser-native, no dependencies).
+async function sha256Hex(str) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf))
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+// Returns the logged-in username if a valid, unexpired session exists.
+function activeSession() {
+  const raw = localStorage.getItem(SESSION_KEY);
+  if (!raw) return null;
+  try {
+    const { user, ts } = JSON.parse(atob(raw));
+    if (!user || !VALID_USERS[user]) return null;
+    if (Date.now() - ts > SESSION_MAX_AGE_MS) return null;
+    return user;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Redirects between login and dashboard based on session state.
+function checkAuth() {
+  const isLoginPage = window.location.pathname.includes("login.html");
+  const session = activeSession();
   if (!session && !isLoginPage) {
-    // Not logged in and trying to view index.html -> send to login
     window.location.replace("login.html");
   } else if (session && isLoginPage) {
-    // Already logged in and trying to view login page -> send to index
     window.location.replace("index.html");
   }
 }
 
-// Handle the login form submission
-function vantaLogin(username, password) {
-  if (VALID_USERS[username] && VALID_USERS[username] === password) {
-    // Create a simple dummy session token
-    localStorage.setItem("vanta_session", btoa(username));
-    window.location.replace("index.html");
-    return true;
-  } else {
-    return false;
-  }
+// Verifies credentials and, on success, opens a session.
+async function vantaLogin(username, password) {
+  const stored = VALID_USERS[username];
+  if (!stored) return false;
+  const hash = await sha256Hex(password);
+  if (hash !== stored) return false;
+  localStorage.setItem(SESSION_KEY, btoa(JSON.stringify({ user: username, ts: Date.now() })));
+  window.location.replace("index.html");
+  return true;
 }
 
-// Handle logging out
 function vantaLogout() {
-  localStorage.removeItem("vanta_session");
+  localStorage.removeItem(SESSION_KEY);
   window.location.replace("login.html");
 }
 
-// Run the auth check automatically when the script loads
+// Gate the page the moment this script loads.
 checkAuth();

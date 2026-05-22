@@ -41,10 +41,32 @@ const AGENT_HEADERS = {
 };
 
 const OUT_HEADERS = {
-  'Content-Type':                'application/json',
-  'Access-Control-Allow-Origin': '*',
-  'Cache-Control':               'public, max-age=240',
+  'Content-Type':                 'application/json',
+  'Access-Control-Allow-Origin':  '*',
+  'Access-Control-Allow-Headers': 'Authorization',
+  'Cache-Control':                'public, max-age=240',
 };
+
+const VALID_USERS = ['aseras'];
+const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+// Verifies the Authorization: Bearer <vanta_session> header.
+function isAuthorized(event) {
+  const h = (event.headers && (event.headers.authorization || event.headers.Authorization)) || '';
+  const m = h.match(/^Bearer\s+(.+)$/i);
+  if (!m) return false;
+  try {
+    const { user, ts } = JSON.parse(Buffer.from(m[1], 'base64').toString('utf8'));
+    return VALID_USERS.includes(user) && (Date.now() - ts) < SESSION_MAX_AGE_MS;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Weekly macro bias — bundled at build time (esbuild inlines the require),
+// so it's always available without a network round-trip.
+let macroBiasData = null;
+try { macroBiasData = require('../../bias_output.json'); } catch (e) { macroBiasData = null; }
 
 // ── HTTP HELPERS ─────────────────────────────────────────────────────────────
 function fetchJson(url, cookie) {
@@ -556,19 +578,19 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers: OUT_HEADERS, body: '' };
   }
+  if (!isAuthorized(event)) {
+    return { statusCode: 401, headers: OUT_HEADERS, body: JSON.stringify({ error: true, message: 'unauthorized' }) };
+  }
 
   try {
-    const cookie  = process.env.FF_SESSION || '';
-    const exp     = todayET();
-    const siteUrl = (process.env.URL || '').replace(/\/$/, '');
+    const cookie = process.env.FF_SESSION || '';
+    const exp    = todayET();
 
     // All upstream calls run in parallel. Only the levels call is required.
-    const [data, volData, yahoo, biasData] = await Promise.all([
+    const [data, volData, yahoo] = await Promise.all([
       fetchJson(`${BASE_URL}/futures-levels?symbol=${SYMBOL}&exp=${exp}`, cookie),
       fetchJson(`${BASE_URL}/vol/realized?symbol=${SYMBOL}`, cookie).catch(() => null),
       fetchYahooDaily().catch(() => null),
-      siteUrl ? httpGetJson(`${siteUrl}/bias_output.json`, { Accept: 'application/json' }, 7000).catch(() => null)
-              : Promise.resolve(null),
     ]);
 
     if (!data.rows || !data.rows.length) throw new Error('No rows — FF_SESSION may be expired.');
@@ -605,11 +627,11 @@ exports.handler = async (event) => {
       pca     = computePCA(yahoo.bars);
     }
 
-    // Macro bias
+    // Macro bias (bundled at build time)
     let macroBias = 'UNKNOWN', macroRegime = {};
-    if (biasData) {
-      macroBias   = biasData.confluence   || 'UNKNOWN';
-      macroRegime = biasData.macro_regime || {};
+    if (macroBiasData) {
+      macroBias   = macroBiasData.confluence   || 'UNKNOWN';
+      macroRegime = macroBiasData.macro_regime || {};
     }
 
     const result = classifyIntradayBias({

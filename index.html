@@ -772,26 +772,6 @@ footer .alph { color: rgba(255,255,255,0.55); }
 </div>
 
 <script>
-// ── HISTORICAL DATA ────────────────────────────────
-const HIST = [
-  { date:"2026-02-05", regime:"LEAN RISK-OFF", score:-1, dir:"BULLISH", prob:0.502, vol:0.0172, conf:"LEAN BEAR" },
-  { date:"2026-02-12", regime:"LEAN RISK-OFF", score:-2, dir:"BULLISH", prob:0.502, vol:0.0156, conf:"LEAN BEAR" },
-  { date:"2026-02-19", regime:"TRANSITION",    score: 0, dir:"BULLISH", prob:0.508, vol:0.0134, conf:"MIXED" },
-  { date:"2026-02-26", regime:"TRANSITION",    score: 0, dir:"BEARISH", prob:0.495, vol:0.0164, conf:"MIXED" },
-  { date:"2026-03-05", regime:"LEAN RISK-ON",  score: 1, dir:"BEARISH", prob:0.495, vol:0.0145, conf:"LEAN BULL" },
-  { date:"2026-03-12", regime:"LEAN RISK-OFF", score:-1, dir:"BEARISH", prob:0.495, vol:0.0152, conf:"LEAN BEAR" },
-  { date:"2026-03-19", regime:"RISK-OFF",      score:-4, dir:"BEARISH", prob:0.495, vol:0.0152, conf:"LEAN BEAR" },
-  { date:"2026-03-26", regime:"RISK-OFF",      score:-3, dir:"BEARISH", prob:0.495, vol:0.0177, conf:"LEAN BEAR" },
-  { date:"2026-04-02", regime:"RISK-OFF",      score:-4, dir:"BEARISH", prob:0.495, vol:0.0181, conf:"LEAN BEAR" },
-  { date:"2026-04-09", regime:"RISK-OFF",      score:-4, dir:"BULLISH", prob:0.502, vol:0.0177, conf:"LEAN BEAR" },
-  { date:"2026-04-16", regime:"RISK-ON",       score: 4, dir:"BEARISH", prob:0.499, vol:0.0165, conf:"LEAN BULL" },
-  { date:"2026-04-23", regime:"RISK-ON",       score: 5, dir:"BEARISH", prob:0.499, vol:0.0141, conf:"LEAN BULL" },
-  { date:"2026-04-30", regime:"LEAN RISK-ON",  score: 1, dir:"BEARISH", prob:0.499, vol:0.0140, conf:"LEAN BULL" },
-  { date:"2026-05-07", regime:"LEAN RISK-ON",  score: 1, dir:"BEARISH", prob:0.499, vol:0.0169, conf:"LEAN BULL" },
-  { date:"2026-05-14", regime:"RISK-ON",       score: 4, dir:"BEARISH", prob:0.499, vol:0.0140, conf:"LEAN BULL" },
-  { date:"2026-05-21", regime:"LEAN RISK-OFF", score:-2, dir:"BEARISH", prob:0.499, vol:0.0137, conf:"LEAN BEAR" },
-];
-
 // ── HELPERS ───────────────────────────────────────
 function cc(v) {
   if (!v) return "mixed";
@@ -1018,60 +998,6 @@ function render(d) {
   lvlCard.appendChild(tbl);
   row2.appendChild(lvlCard);
   app.appendChild(row2);
-
-  // ── ACCURACY BANNER ──
-  app.appendChild(secLbl("Model Performance — Feb to May 2026"));
-  const accData = [
-    ["Directional Accuracy", "76.9%",  "13 tradeable calls",          "var(--bull)"],
-    ["RISK-ON Accuracy",     "100%",   "Perfect in full risk-on",      "var(--bull)"],
-    ["LEAN BULL Accuracy",   "5 / 5",  "All lean bull calls correct",  "var(--bull)"],
-    ["Misses",               "2",      "April 2026 tariff catalyst",   "var(--muted)"],
-  ];
-  const acc = el("div", {className:"acc"});
-  acc.style.animationDelay = (_ci++ * 0.1) + "s";
-  for (let i = 0; i < accData.length; i++) {
-    const lbl = accData[i][0], val = accData[i][1],
-          sub = accData[i][2], color = accData[i][3];
-    const as = el("div", {className:"as"});
-    as.appendChild(el("div", {className:"al"}, lbl));
-    as.appendChild(el("div", {className:"av", style:{color:color}}, val));
-    as.appendChild(el("div", {className:"as2"}, sub));
-    acc.appendChild(as);
-  }
-  app.appendChild(acc);
-
-  // ── HISTORY TABLE ──
-  app.appendChild(secLbl("Blind Prediction History"));
-  const hcard = el("div", {className:"card"});
-  hcard.style.padding = "0";
-  hcard.style.overflow = "hidden";
-  hcard.style.animationDelay = (_ci++ * 0.1) + "s";
-  const htbl = el("table", {className:"hist"});
-  const thead = el("thead");
-  const htr = el("tr");
-  const headers = ["Week Of","Regime","Score","Price Dir","Prob","Vol Est","Confluence"];
-  for (let i = 0; i < headers.length; i++) {
-    htr.appendChild(el("th", {}, headers[i]));
-  }
-  thead.appendChild(htr);
-  htbl.appendChild(thead);
-  const tbody = el("tbody");
-  for (let i = 0; i < HIST.length; i++) {
-    const h = HIST[i];
-    const tr = el("tr");
-    tr.appendChild(el("td", {}, h.date));
-    const rtd = el("td"); rtd.appendChild(tagEl(h.regime, cc(h.regime))); tr.appendChild(rtd);
-    const scoreColor = h.score > 0 ? "var(--bull)" : h.score < 0 ? "var(--bear)" : "var(--muted)";
-    tr.appendChild(el("td", {style:{color:scoreColor}}, sgn(h.score)));
-    const dtd = el("td"); dtd.appendChild(tagEl(h.dir, dc(h.dir))); tr.appendChild(dtd);
-    tr.appendChild(el("td", {style:{color:"var(--muted)"}}, pct(h.prob)));
-    tr.appendChild(el("td", {style:{color:"var(--muted)"}}, pct(h.vol, 2)));
-    const ctd = el("td"); ctd.appendChild(tagEl(h.conf, cc(h.conf))); tr.appendChild(ctd);
-    tbody.appendChild(tr);
-  }
-  htbl.appendChild(tbody);
-  hcard.appendChild(htbl);
-  app.appendChild(hcard);
 }
 
 // ── TAB SWITCHING ─────────────────────────────────
@@ -1336,7 +1262,7 @@ let macroBiasTimer = null;
 function startMacroBiasTimer() {
   const update = function() {
     const e = document.getElementById("macro-next-update");
-    if (e) e.textContent = "Next H.4.1: " + formatDurationLong(msUntilNextH41());
+    if (e) e.textContent = "Next update (Fri 5PM ET): " + formatDurationLong(msUntilNextMacroUpdate());
   };
   update();
   if (macroBiasTimer) clearInterval(macroBiasTimer);
@@ -1381,18 +1307,18 @@ function getETOffset() {
   return (nyMs - utcMs) / 3600000;
 }
 
-function msUntilNextH41() {
+// Macro data refreshes every Friday 5:00 PM ET (after CFTC COT release).
+function msUntilNextMacroUpdate() {
   const now      = new Date();
   const etOffset = getETOffset();
   const etMs     = now.getTime() + etOffset * 3600000;
   const etDate   = new Date(etMs);
   const dayET    = etDate.getUTCDay();
   const hourET   = etDate.getUTCHours();
-  const minET    = etDate.getUTCMinutes();
-  let daysUntil  = (4 - dayET + 7) % 7;
-  if (daysUntil === 0 && (hourET > 16 || (hourET === 16 && minET >= 30))) daysUntil = 7;
+  let daysUntil  = (5 - dayET + 7) % 7;
+  if (daysUntil === 0 && hourET >= 17) daysUntil = 7;
   const targetEtDate = new Date(etMs + daysUntil * 86400000);
-  targetEtDate.setUTCHours(16, 30, 0, 0);
+  targetEtDate.setUTCHours(17, 0, 0, 0);
   return targetEtDate.getTime() - etOffset * 3600000 - now.getTime();
 }
 
@@ -1785,12 +1711,18 @@ function startIntradayCountdown() {
 }
 
 function loadIntraday() {
-  fetch("/.netlify/functions/intraday?_=" + Date.now())
+  fetch("/.netlify/functions/intraday?_=" + Date.now(), {
+    method: "GET",
+    headers: {
+      "Authorization": "Bearer " + localStorage.getItem("vanta_session")
+    }
+  })
     .then(function(r) {
       if (!r.ok) throw new Error("HTTP " + r.status);
       return r.json();
     })
     .then(function(d) {
+      if (d && d.error) throw new Error(d.message || "intraday data unavailable");
       intradayLoaded     = true;
       lastIntradayUpdate = new Date();
       renderIntraday(d);
@@ -1820,7 +1752,10 @@ fetch("/.netlify/functions/bias?_" + Date.now(), {
     if (!r.ok) throw new Error("HTTP " + r.status);
     return r.json();
   })
-  .then(render)
+  .then(function(d) {
+    if (d && d.error) throw new Error(d.message || "macro data unavailable");
+    render(d);
+  })
   .catch(function(err) {
     const app = document.getElementById("app");
     clearEl(app);
