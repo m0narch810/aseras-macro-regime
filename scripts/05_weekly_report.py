@@ -432,11 +432,20 @@ def print_week(date, row, lv, save_list=None):
     elif vol_pctile >= 40: vol_label = "NORMAL VOL"
     else:                  vol_label = "LOW VOL"
 
+    # In LIVE_MODE the prediction applies to the UPCOMING week (day after this
+    # Thursday through next Thursday). In historical mode, label the data window.
+    if LIVE_MODE:
+        meta_week_start = (date + pd.Timedelta(days=1)).date()
+        meta_week_end   = (date + pd.Timedelta(days=7)).date()
+    else:
+        meta_week_start = week_start
+        meta_week_end   = week_end
+
     result = {
         "meta": {
             "generated_at": datetime.today().strftime("%Y-%m-%d %H:%M"),
-            "week_start":   str(week_start),
-            "week_end":     str(week_end),
+            "week_start":   str(meta_week_start),
+            "week_end":     str(meta_week_end),
             "instrument":   "NQ / ES Futures",
         },
         "confluence": confluence,
