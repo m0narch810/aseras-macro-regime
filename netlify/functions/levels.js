@@ -47,46 +47,39 @@ function fetchJson(url, cookie) {
 }
 
 // ── DATE HELPERS ──────────────────────────────────────────────
-function nextTradingDays(n = 3) {
-  const days = [];
-  const d = new Date();
-  while (days.length < n) {
-    const dow = d.getDay();
-    if (dow !== 0 && dow !== 6) days.push(d.toISOString().slice(0, 10));
-    d.setDate(d.getDate() + 1);
-  }
-  return days;
+function todayET() {
+  // Compute current date in US/Eastern to match FreeFlow's 0DTE expiry
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 }
 
 // ── AGGREGATION ───────────────────────────────────────────────
-function aggregateDatasets(datasets) {
+function aggregateDataset(data) {
+  const rows  = data.rows  || [];
+  const ratio = data.ratio || 41.14;
   const strikes = {};
-  let futuresPrice = 0, spotEtf = 0, first = true;
 
-  for (const data of datasets) {
-    const rows  = data.rows  || [];
-    const ratio = data.ratio || 41.14;
-    if (!rows.length) continue;
-    if (first) { futuresPrice = data.futures_price || 0; spotEtf = data.etf_spot || 0; first = false; }
+  for (const row of rows) {
+    const etf = row.strike_etf || 0;
+    const sf  = row.strike_futures != null
+      ? Math.round(row.strike_futures * 10) / 10
+      : Math.round(etf * ratio * 10) / 10;
 
-    for (const row of rows) {
-      const etf = row.strike_etf || 0;
-      const sf  = row.strike_futures != null
-        ? Math.round(row.strike_futures * 10) / 10
-        : Math.round(etf * ratio * 10) / 10;
-
-      if (!strikes[sf]) {
-        strikes[sf] = { strike_etf: etf, net_gex: 0, net_vex: 0, net_charmex: 0, net_dag: 0, total_oi: 0 };
-      }
-      const s = strikes[sf];
-      s.net_gex     += row.gex     || 0;
-      s.net_vex     += row.vex     || 0;
-      s.net_charmex += row.charmex || 0;
-      s.net_dag     += row.dag     || 0;
-      s.total_oi    += row.oi      || 0;
+    if (!strikes[sf]) {
+      strikes[sf] = { strike_etf: etf, net_gex: 0, net_vex: 0, net_charmex: 0, net_dag: 0, total_oi: 0 };
     }
+    const s = strikes[sf];
+    s.net_gex     += row.gex     || 0;
+    s.net_vex     += row.vex     || 0;
+    s.net_charmex += row.charmex || 0;
+    s.net_dag     += row.dag     || 0;
+    s.total_oi    += row.oi      || 0;
   }
-  return { strikes, futuresPrice, spotEtf };
+
+  return {
+    strikes,
+    futuresPrice: data.futures_price || 0,
+    spotEtf:      data.etf_spot      || 0,
+  };
 }
 
 // ── REGIME ────────────────────────────────────────────────────
@@ -150,15 +143,11 @@ exports.handler = async (event) => {
   }
 
   try {
-    const cookie   = process.env.FF_SESSION || '';
-    const expiries = nextTradingDays(3);
+    const cookie = process.env.FF_SESSION || '';
+    const exp    = todayET();
 
-    const results = await Promise.allSettled(
-      expiries.map(exp => fetchJson(`${BASE_URL}/futures-levels?symbol=${SYMBOL}&exp=${exp}`, cookie))
-    );
-    const datasets = results.filter(r => r.status === 'fulfilled').map(r => r.value);
-
-    if (!datasets.length) throw new Error('All FreeFlow requests failed — FF_SESSION may be expired.');
+    const data = await fetchJson(`${BASE_URL}/futures-levels?symbol=${SYMBOL}&exp=${exp}`, cookie);
+    if (!data.rows || !data.rows.length) throw new Error('No rows returned from FreeFlow — FF_SESSION may be expired.');
 
     let ctx = { current_iv: null, rv_iv_ratio: null, hv21: null };
     try {
@@ -168,7 +157,7 @@ exports.handler = async (event) => {
       ctx.hv21        = vol.hv21        ?? null;
     } catch (_) {}
 
-    const { strikes, futuresPrice, spotEtf } = aggregateDatasets(datasets);
+    const { strikes, futuresPrice, spotEtf } = aggregateDataset(data);
     const [regime, weights]                  = classifyRegime(ctx);
     const levels                             = scoreLevels(strikes, weights, futuresPrice);
 
