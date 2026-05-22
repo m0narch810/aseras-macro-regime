@@ -1109,6 +1109,11 @@ function renderLevels(d) {
 
   hdr.appendChild(stat("Updated", d.updated || "—"));
 
+  hdr.appendChild(stat("NQ",
+    d.nq_price != null
+      ? d.nq_price.toLocaleString("en-US", {minimumFractionDigits:1, maximumFractionDigits:1})
+      : "—"));
+
   hdr.appendChild(stat("QQQ",
     d.qqq_price != null ? d.qqq_price.toFixed(2) : "—"));
 
@@ -1172,7 +1177,9 @@ function renderLevels(d) {
   app.appendChild(panels);
 
   // ── ALL LEVELS TABLE ──
-  app.appendChild(secLbl("All Levels"));
+  const allLbl = secLbl("All Levels");
+  allLbl.style.marginTop = "18px";
+  app.appendChild(allLbl);
   const allWrap = el("div");
   app.appendChild(allWrap);
   renderAllTable(allWrap, levels);

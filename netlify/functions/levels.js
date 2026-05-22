@@ -91,13 +91,22 @@ function computeGammaFlip(strikes) {
     .sort((a, b) => b.strike - a.strike); // descending: high → low
 
   let cumGex = 0;
+  let closestStrike = null;
+  let closestAbs    = Infinity;
+
   for (const row of sorted) {
     const prev = cumGex;
     cumGex += row.gex;
+    // Exact zero crossing — return immediately
     if (prev > 0 && cumGex <= 0) return Math.round(row.strike * 10) / 10;
     if (prev < 0 && cumGex >= 0) return Math.round(row.strike * 10) / 10;
+    // Track nearest-to-zero as fallback (GEX profile skewed one direction)
+    if (Math.abs(cumGex) < closestAbs) {
+      closestAbs    = Math.abs(cumGex);
+      closestStrike = row.strike;
+    }
   }
-  return null;
+  return closestStrike != null ? Math.round(closestStrike * 10) / 10 : null;
 }
 
 // ── REGIME ────────────────────────────────────────────────────
@@ -192,6 +201,7 @@ exports.handler = async (event) => {
       headers:    OUT_HEADERS,
       body: JSON.stringify({
         updated:     updatedET,
+        nq_price:    Math.round(futuresPrice * 10) / 10,
         qqq_price:   Math.round(spotEtf      * 100) / 100,
         gamma_flip:  gammaFlip,
         regime,
