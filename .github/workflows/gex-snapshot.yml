@@ -1,14 +1,14 @@
-name: GEX 15-min snapshot
+name: GEX 5-min snapshot
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Runs every 15 minutes during the wide UTC envelope that covers both EST and
+# Runs every 5 minutes during the wide UTC envelope that covers both EST and
 # EDT for 03:00-17:00 ET. The Python script's ET-aware check no-ops the runs
 # that fall outside the actual ET active window, so we never persist a
 # snapshot taken at the wrong time.
 #
 #   EST (Nov-Mar): 03:00-17:00 ET = 08:00-22:00 UTC
 #   EDT (Mar-Nov): 03:00-17:00 ET = 07:00-21:00 UTC
-#   Envelope     : 07:00-21:59 UTC, Mon-Fri  →  cron */15 7-21 * * 1-5
+#   Envelope     : 07:00-21:59 UTC, Mon-Fri  →  cron */5 7-21 * * 1-5
 #
 # Snapshots are written to a dedicated `gex-snapshots` branch so master stays
 # clean. The branch is created on first run if it doesn't yet exist.
@@ -19,7 +19,7 @@ name: GEX 15-min snapshot
 
 on:
   schedule:
-    - cron: '*/15 7-21 * * 1-5'
+    - cron: '*/5 7-21 * * 1-5'
   workflow_dispatch:   # manual trigger from the Actions tab
 
 env:

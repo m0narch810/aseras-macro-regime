@@ -1446,7 +1446,7 @@ function getNextLevelsRefreshMark() {
   const now  = new Date();
   const next = new Date(now);
   const m    = next.getMinutes();
-  const nm   = Math.ceil((m * 60 + next.getSeconds() + 1) / 120) * 120;
+  const nm   = Math.ceil((m * 60 + next.getSeconds() + 1) / 60) * 60;
   next.setMinutes(0, nm, 0);
   return next;
 }

@@ -2,7 +2,7 @@
 """
 schedule_freeflow_logger.py
 ===========================
-Continuous 15-minute scheduler around freeflow_logger.py for building a
+Continuous 5-minute scheduler around freeflow_logger.py for building a
 labeled intraday GEX dataset.
 
 Active window: Mon–Fri 03:00–17:00 ET (London open through RTH close).
@@ -30,7 +30,7 @@ Usage:
 In --once mode, the script checks ET and either takes a single snapshot
 (if inside the active window) or no-ops with a short message, then exits 0.
 This is the CI entrypoint; the workflow file at
-.github/workflows/gex-snapshot.yml invokes it every 15 minutes.
+.github/workflows/gex-snapshot.yml invokes it every 5 minutes.
 """
 
 import csv
@@ -65,7 +65,7 @@ import freeflow_logger as ffl  # noqa: E402
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 ACTIVE_START      = dtime(3, 0)    # 03:00 ET — London open
 ACTIVE_END        = dtime(17, 0)   # 17:00 ET — past RTH close
-INTERVAL_MINUTES  = 15
+INTERVAL_MINUTES  = 5
 WEEKEND_DAYS      = {5, 6}          # Saturday, Sunday
 LOG_DIR           = os.path.join(BASE_DIR, 'logs')
 INDEX_PATH        = os.path.join(LOG_DIR, 'snapshot_index.csv')
@@ -83,8 +83,8 @@ def in_active_window(now_et):
     return ACTIVE_START <= now_et.time() < ACTIVE_END
 
 
-def next_quarter_hour(now_et):
-    """Return the next ET datetime at a :00/:15/:30/:45 boundary strictly after now."""
+def next_interval_boundary(now_et):
+    """Return the next ET datetime at an INTERVAL_MINUTES boundary strictly after now."""
     minute = (now_et.minute // INTERVAL_MINUTES + 1) * INTERVAL_MINUTES
     if minute >= 60:
         bumped = now_et + timedelta(hours=1)
@@ -178,10 +178,10 @@ def main():
     first_snap, last_snap = None, None
 
     print("=" * 70)
-    print("  freeflow_logger 15-minute scheduler")
+    print(f"  freeflow_logger {INTERVAL_MINUTES}-minute scheduler")
     print(f"  Active window : Mon-Fri {ACTIVE_START.strftime('%H:%M')}-"
           f"{ACTIVE_END.strftime('%H:%M')} ET")
-    print(f"  Interval      : every {INTERVAL_MINUTES} min on :00/:15/:30/:45")
+    print(f"  Interval      : every {INTERVAL_MINUTES} min on aligned boundaries")
     print(f"  Snapshot dir  : {LOG_DIR}")
     print(f"  Index file    : {INDEX_PATH}")
     print("  Stop with Ctrl+C.")
@@ -206,8 +206,8 @@ def main():
                     first_snap = ts_str
                 last_snap = ts_str
 
-            # Sleep until the next aligned 15-minute boundary, re-reading ET each loop.
-            target = next_quarter_hour(current_et())
+            # Sleep until the next aligned INTERVAL_MINUTES boundary, re-reading ET each loop.
+            target = next_interval_boundary(current_et())
             while True:
                 now2 = current_et()
                 if now2 >= target:
@@ -229,7 +229,7 @@ def main():
 
 if __name__ == "__main__":
     import argparse
-    p = argparse.ArgumentParser(description="freeflow_logger 15-min scheduler")
+    p = argparse.ArgumentParser(description="freeflow_logger 5-min scheduler")
     p.add_argument('--once', action='store_true',
                    help='Take a single snapshot if in active ET window, then exit. '
                         'Outside-window invocations exit 0 with a no-op message. '
