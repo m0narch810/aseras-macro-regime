@@ -3,6 +3,8 @@ const {
   AGENT_HEADERS, todayET,
   aggregateDataset, computeGammaFlip, scoreLevels,
   classifyVolRegime, getWeights,
+  computeAggregateGreeks, applyBiasTable,
+  WALL_REACTION_DIR, BIAS_TAG_DIR, GAMMA_ASYMMETRY_RATIO,
 } = require('./lib/options');
 
 const SYMBOL   = 'QQQ';
@@ -16,7 +18,11 @@ const H_GEX_CONFIDENCE_CUT = 0.6;
 const STRONG_WALL          = 60.0;
 const EXCEPTIONAL_WALL     = 75.0;
 const AIR_POCKET_PROXIMITY = 150.0;
-const PROXIMITY_HALFLIFE   = 200.0;
+// e-folding distance: score × exp(-dist/PROXIMITY_EFOLD).
+// At dist=200 pts, weight decays to 1/e ≈ 37% of peak.
+// True halflife = 200 × ln(2) ≈ 139 pts.
+// Previously misnamed PROXIMITY_HALFLIFE.
+const PROXIMITY_EFOLD = 200.0;
 
 // Return-entropy params
 const ENTROPY_WINDOW   = 20;
@@ -260,7 +266,22 @@ function computePCA(bars) {
     PC.push(Math.round(score * 10000) / 10000);
     explained.push(Math.round(Math.max(0, eigenvalues[order[k]]) / totalVar * 1000) / 10);
   }
-  return { PC1: PC[0], PC2: PC[1], PC3: PC[2], pca_explained: explained, pca_n_samples: n };
+
+  // Verify PC1 is actually a momentum axis before trusting its sign.
+  // Features 2,3,4 (indices) are mom_5d, mom_10d, mom_20d in the loading vector.
+  // If their combined absolute loading is weak (< 0.3 of unit vector magnitude),
+  // PC1 may be dominated by the vol cluster — mark pc1_momentum_valid: false.
+  const pc1LoadingVec  = eigenvectors[order[0]];
+  const momLoadingSum  = Math.abs(pc1LoadingVec[2]) + Math.abs(pc1LoadingVec[3]) + Math.abs(pc1LoadingVec[4]);
+  const pc1Valid       = explained[0] > 0 && momLoadingSum > 0.3;
+
+  return {
+    PC1: PC[0], PC2: PC[1], PC3: PC[2],
+    pca_explained:         explained,
+    pca_n_samples:         n,
+    pc1_momentum_loadings: Math.round(momLoadingSum * 10000) / 10000,
+    pc1_momentum_valid:    pc1Valid,
+  };
 }
 
 // ── INTRADAY-SPECIFIC FEATURES ────────────────────────────────────────────────
@@ -283,14 +304,19 @@ function computeTopWall(levels, nqPrice) {
   if (!levels.length || nqPrice == null) return null;
   let best = null, bestWScore = -1;
   for (const lv of levels) {
-    const wscore = (lv.score || 0) * Math.exp(-Math.abs(lv.dist_nq || 9999) / PROXIMITY_HALFLIFE);
+    const wscore = (lv.score || 0) * Math.exp(-Math.abs(lv.dist_nq || 9999) / PROXIMITY_EFOLD);
     if (wscore > bestWScore) { bestWScore = wscore; best = { ...lv, proximity_score: Math.round(wscore * 100) / 100 }; }
   }
   return best;
 }
 
 // ── INTRADAY CLASSIFIER ───────────────────────────────────────────────────────
-function classifyIntradayBias({ gammaRegime, volRegime, gammaFlip, nqPrice, topWall, hGexNorm, macroBias, entropy, pca }) {
+// Inputs (new):
+//   pdfBiasTag        — bias.pdf primary bias tag (e.g. 'BULLISH_CHOP')
+//   wallReactionTag   — walls.pdf reaction tag for the top wall (e.g. 'CALL_WALL_BULLISH_GRIND')
+//   aggregateGreeks   — { gex_sign, charm_sign, vanna_sign, ... } from the level set
+function classifyIntradayBias({ gammaRegime, volRegime, gammaFlip, nqPrice, topWall, hGexNorm, macroBias, entropy, pca,
+                                pdfBiasTag, wallReactionTag, aggregateGreeks }) {
   if (entropy && entropy.entropy_state === 'CRITICAL') {
     return {
       intraday_bias:    'NO_BIAS',
@@ -309,7 +335,11 @@ function classifyIntradayBias({ gammaRegime, volRegime, gammaFlip, nqPrice, topW
 
   const macroBullish = MACRO_BULL.has(macroBias);
   const macroBearish = MACRO_BEAR.has(macroBias);
-  const pc1Bull      = pca && pca.PC1 != null && pca.PC1 > 0;
+  // Only use PC1 as a directional signal if the momentum loadings confirm
+  // it is actually a trend/momentum axis. If pc1_momentum_valid is false,
+  // PC1 is likely dominated by the vol cluster and its sign is meaningless
+  // for direction.
+  const pc1Bull = pca && pca.PC1 != null && pca.pc1_momentum_valid === true && pca.PC1 > 0;
 
   let air_pocket_watch = false, air_pocket_type = null;
   let bias, conf, reason;
@@ -369,36 +399,106 @@ function classifyIntradayBias({ gammaRegime, volRegime, gammaFlip, nqPrice, topW
     reason = `Gamma regime unknown (no flip data). Cannot classify.`;
   }
 
-  // Confidence modifiers
-  const CONF_ORDER = ['LOW', 'MODERATE', 'HIGH'];
-  const down = c => CONF_ORDER[Math.max(0, CONF_ORDER.indexOf(c) - 1)];
-  const up   = c => CONF_ORDER[Math.min(CONF_ORDER.length - 1, CONF_ORDER.indexOf(c) + 1)];
+  // ── CONFIDENCE: continuous score → bucket once ───────────────
+  // Each modifier contributes +1 (raises evidence) or -1 (reduces evidence)
+  // or 0 (neutral). We sum all modifiers, then map to LOW/MODERATE/HIGH.
+  // Starting evidence is set by the initial conf assignment above.
+  const CONF_BASE = { 'LOW': -1, 'MODERATE': 0, 'HIGH': 1 };
+  let evidence = CONF_BASE[conf] ?? 0;
 
   // Vol × gamma regime interaction
   if (gammaRegime === 'NEGATIVE' && volRegime === 'EXPANSION') {
-    reason += ` EXPANSION vol + negative gamma: dealers short and IV expanding — moves are amplified, not dampened.`;
-    if (macroBearish) { conf = up(conf); reason += ` Macro confirms — all three axes bearish.`; }
+    reason += ` EXPANSION vol + negative gamma: dealers short and IV expanding — moves amplified.`;
+    if (macroBearish) {
+      evidence += 1;
+      reason += ` Macro confirms — all three axes bearish.`;
+    }
   } else if (gammaRegime === 'NEGATIVE' && volRegime === 'CONTRACTION') {
-    conf = down(conf);
-    reason += ` CONTRACTION vol with negative gamma is unusual — potential mean-reversion or sudden vol spike, reduce size.`;
+    evidence -= 1;
+    reason += ` CONTRACTION vol with negative gamma is unusual — potential mean-reversion, reduce size.`;
   } else if (gammaRegime === 'POSITIVE' && volRegime === 'CONTRACTION') {
-    reason += ` CONTRACTION vol + positive gamma: maximum pinning environment — GEX walls highly reliable.`;
+    reason += ` CONTRACTION vol + positive gamma: maximum pinning — walls highly reliable.`;
   }
 
+  // GEX dispersion penalty
   if (hGexNorm > H_GEX_CONFIDENCE_CUT) {
-    conf = down(conf);
-    reason += ` GEX is dispersed (H_GEX_norm ${hGexNorm.toFixed(2)} > 0.6) — no single dominant wall, confidence penalized.`;
+    evidence -= 1;
+    reason += ` GEX dispersed (H_GEX_norm ${hGexNorm.toFixed(2)} > 0.6) — no dominant wall.`;
   }
+
+  // Macro neutrality penalty
   if (!macroBullish && !macroBearish) {
-    conf = down(conf);
+    evidence -= 1;
     reason += ` Macro bias neutral (${macroBias}) — confidence penalized.`;
   }
+
+  // Entropy gate
   if (entropy && entropy.entropy_state === 'STABLE') {
-    reason += ` Return entropy STABLE (H ${entropy.H_returns} < threshold ${entropy.H_threshold}) — `
-            + `orderly tape, options levels carry directional edge.`;
+    reason += ` Return entropy STABLE (H ${entropy.H_returns} < threshold ${entropy.H_threshold}) — orderly tape.`;
   } else if (!entropy || entropy.entropy_state === 'UNKNOWN') {
-    reason += ` (Entropy gate unavailable — historical price feed unreachable.)`;
+    reason += ` (Entropy gate unavailable.)`;
   }
+
+  // ── PDF-DERIVED EVIDENCE LAYER ────────────────────────────────
+  // Apply two additional signals on top of the existing accumulator:
+  //   1. bias.pdf "primary bias" tag from aggregate (GEX, Charm, Vanna, IV, flip).
+  //   2. walls.pdf reaction tag for the top wall.
+  // Both are converted to a {dir, strength} pair via tag-direction maps in
+  // lib/options.js. Strength-2 tags (breakdowns / squeezes) contribute more
+  // evidence than strength-1 tags (standard reactions).
+  //
+  // The current `bias` variable has already been set above; we use it to
+  // determine whether the PDF signals confirm or conflict with the call.
+  const currentBull = bias.includes('BULL') && !bias.includes('BEAR');
+  const currentBear = bias.includes('BEAR');
+
+  const pdfDir = pdfBiasTag && BIAS_TAG_DIR[pdfBiasTag];
+  if (pdfDir && pdfDir.dir !== 'NEUTRAL') {
+    const matches = (pdfDir.dir === 'BULL' && currentBull) || (pdfDir.dir === 'BEAR' && currentBear);
+    const conflicts = (pdfDir.dir === 'BULL' && currentBear) || (pdfDir.dir === 'BEAR' && currentBull);
+    if (matches) {
+      evidence += pdfDir.strength;
+      reason += ` Aggregate bias table (${pdfBiasTag.replace(/_/g, ' ').toLowerCase()}) confirms.`;
+    } else if (conflicts) {
+      evidence -= pdfDir.strength;
+      reason += ` ⚠ Aggregate bias table (${pdfBiasTag.replace(/_/g, ' ').toLowerCase()}) conflicts with directional call.`;
+    }
+  }
+
+  const wallDir = wallReactionTag && WALL_REACTION_DIR[wallReactionTag];
+  if (wallDir && wallDir.dir !== 'NEUTRAL') {
+    const matches = (wallDir.dir === 'BULL' && currentBull) || (wallDir.dir === 'BEAR' && currentBear);
+    const conflicts = (wallDir.dir === 'BULL' && currentBear) || (wallDir.dir === 'BEAR' && currentBull);
+    if (matches) {
+      evidence += wallDir.strength;
+      reason += ` Top-wall reaction (${wallReactionTag.replace(/_/g, ' ').toLowerCase()}) confirms.`;
+    } else if (conflicts) {
+      evidence -= wallDir.strength;
+      reason += ` ⚠ Top-wall reaction (${wallReactionTag.replace(/_/g, ' ').toLowerCase()}) conflicts.`;
+      // walls.pdf strength-2 tags imply expansion/breakdown — flag air-pocket risk.
+      if (wallDir.strength >= 2 && !air_pocket_watch) {
+        air_pocket_watch = true;
+        air_pocket_type  = 'WALL_BREAKDOWN';
+      }
+    }
+  }
+
+  // ── DIM/ERAKER/VILKOV ASYMMETRY ──────────────────────────────
+  // 2.pdf finds positive-MM-gamma vol attenuation is ~3x stronger than
+  // negative-MM-gamma vol amplification. Scale negative-gamma evidence
+  // toward zero (multiply by GAMMA_ASYMMETRY_RATIO ≈ 0.34) so that signals
+  // in the negative-gamma regime carry less confidence than equivalent
+  // signals in the positive-gamma regime.
+  if (gammaRegime === 'NEGATIVE') {
+    const before = evidence;
+    evidence = Math.sign(evidence) * Math.abs(evidence) * GAMMA_ASYMMETRY_RATIO;
+    if (Math.abs(before) > 0.01) {
+      reason += ` (Evidence scaled by ${GAMMA_ASYMMETRY_RATIO.toFixed(2)} — Dim/Eraker/Vilkov 2025 asymmetry: negative-gamma signals are weaker than positive-gamma signals.)`;
+    }
+  }
+
+  // Map continuous evidence score to confidence bucket (single conversion, no clamping chain)
+  conf = evidence >= 1 ? 'HIGH' : evidence <= -1 ? 'LOW' : 'MODERATE';
 
   return { intraday_bias: bias, confidence: conf, air_pocket_watch, air_pocket_type, reason };
 }
@@ -427,7 +527,6 @@ exports.handler = async (event) => {
     // Compute flip + both regime axes before scoring — weights depend on both.
     const gammaFlip  = computeGammaFlip(strikes, futuresPrice);
     const flipDiff   = futuresPrice != null && gammaFlip != null ? futuresPrice - gammaFlip : null;
-    const gammaRegime = flipDiff == null ? 'UNKNOWN' : flipDiff > 50 ? 'POSITIVE' : flipDiff < -50 ? 'NEGATIVE' : 'NEAR_FLIP';
 
     let iv = null, rvIvRatio = null, hv21 = null;
     if (volData) {
@@ -435,12 +534,34 @@ exports.handler = async (event) => {
       rvIvRatio   = volData.rv_iv_ratio ?? null;
       hv21        = volData.hv21        ?? null;
     }
+
+    // Vol-scaled gamma regime band: 0.5 × IV-implied daily move
+    // If IV is unavailable, fall back to fixed 50 pts.
+    // Derivation: daily_1sd = futuresPrice × (IV/100) / sqrt(252)
+    //             band = 0.5 × daily_1sd
+    // This makes NEAR_FLIP adaptive — wider when vol is high, tighter when low.
+    const _ivBand = (iv != null && iv > 0 && futuresPrice != null)
+      ? Math.max(30, 0.5 * futuresPrice * (iv / 100) / Math.sqrt(252))
+      : 50;
+    const gammaRegime = flipDiff == null ? 'UNKNOWN'
+      : flipDiff >  _ivBand ? 'POSITIVE'
+      : flipDiff < -_ivBand ? 'NEGATIVE'
+      : 'NEAR_FLIP';
     const levelsRegime = classifyVolRegime(iv, rvIvRatio);
     const weights      = getWeights(levelsRegime, gammaRegime);
 
     const levels      = scoreLevels(strikes, weights, futuresPrice);
     const H_GEX_norm = computeHGEXNorm(levels);
     const topWall    = computeTopWall(levels, futuresPrice);
+
+    // ── PDF-DERIVED CLASSIFICATIONS ──────────────────────────────────────────
+    // walls.pdf reaction tag is attached per-level by scoreLevels(); pick the
+    // tag for the top wall to feed the classifier. Aggregate Greek signs
+    // feed the bias.pdf primary-bias table.
+    const aggregateGreeks = computeAggregateGreeks(levels);
+    const wallReactionTag = topWall ? topWall.wall_reaction : null;
+    const priceVsFlip     = flipDiff == null ? 0 : (flipDiff > 0 ? 1 : -1);
+    const pdfBiasTag      = applyBiasTable(aggregateGreeks, levelsRegime, priceVsFlip);
 
     let entropy    = { entropy_state: 'UNKNOWN', H_returns: null, H_threshold: null };
     let pca        = { PC1: null, PC2: null, PC3: null, pca_explained: null, pca_n_samples: 0 };
@@ -460,6 +581,7 @@ exports.handler = async (event) => {
     const result = classifyIntradayBias({
       gammaRegime, volRegime: levelsRegime, gammaFlip, nqPrice: futuresPrice,
       topWall, hGexNorm: H_GEX_norm, macroBias, entropy, pca,
+      pdfBiasTag, wallReactionTag, aggregateGreeks,
     });
 
     const updatedET = new Date().toLocaleString('en-US', {
@@ -491,10 +613,16 @@ exports.handler = async (event) => {
         PC3:           pca.PC3,
         pca_explained: pca.pca_explained,
         pca_n_samples: pca.pca_n_samples,
+        pc1_momentum_loadings: pca.pc1_momentum_loadings,
+        pc1_momentum_valid:    pca.pc1_momentum_valid,
         price_source:  priceSource,
         mm_intensification: [],
         macro_bias:    macroBias,
         macro_regime:  macroRegime,
+        // PDF-derived methodology fields (bias.pdf + walls.pdf):
+        pdf_primary_bias:   pdfBiasTag,
+        wall_reaction:      wallReactionTag,
+        aggregate_greeks:   aggregateGreeks,
         ...result,
       }),
     };

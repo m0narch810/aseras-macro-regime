@@ -70,6 +70,8 @@ python freeflow_logger.py --schedule # wait for next snapshot time
 | `scripts/04_train_model.py` | Trains XGBoost + vol model with Optuna → `models/*.pkl` |
 | `scripts/05_weekly_report.py` | Live report (consumes saved models; does not retrain) |
 | `scripts/06_check_accuracy.py` | Scores blind predictions vs actual weekly closes |
+| `scripts/09_intraday_bias.py` | Local intraday bias classifier (mirrors `intraday.js`); writes `intraday_bias.json` |
+| `scripts/10_validate_intraday.py` | Walk-forward validation of intraday bias; binomial test on STABLE sessions |
 
 Raw price CSVs go in `data/raw/NQ/` and `data/raw/ES/` — scripts 01+ expect them there.
 
@@ -115,7 +117,7 @@ logs/               ← levels_YYYY-MM-DD.csv snapshots written by freeflow_logg
 
 **`levels_data.json`** — a static snapshot in the repo root used for local development and debugging only. It is NOT auto-updated by any process. The live dashboard always calls the Netlify function.
 
-**`bias_output.json`** — updated manually: run the weekly report with `--live`, then copy the JSON output into this file and commit. Schema: `meta`, `confluence`, `macro_regime` (name, score, factor_scores), `price_model` (direction, probability), `vol_forecast`, `cot`, `vix_term_structure`, `key_levels`.
+**`bias_output.json`** — automatically updated by GitHub Actions (`.github/workflows/weekly-macro-update.yml`): runs every Friday at 10 PM UTC (5 PM EST / 6 PM EDT, after CFTC COT release), executes `scripts/05_weekly_report.py --live`, and commits the result. Can also be triggered manually from the Actions tab. Requires `FRED_API_KEY` set as a GitHub repo secret (not the `.env` key — a separate secret in repo Settings → Secrets). Schema: `meta`, `confluence`, `macro_regime` (name, score, factor_scores), `price_model` (direction, probability), `vol_forecast`, `cot`, `vix_term_structure`, `key_levels`.
 
 **Dashboard JS architecture** (`index.html` script section):
 - All DOM construction uses the `el(tag, attrs, ...children)` helper — no framework, no template strings.
@@ -124,6 +126,40 @@ logs/               ← levels_YYYY-MM-DD.csv snapshots written by freeflow_logg
 - The `HIST` array near the top of the script is **hardcoded** weekly prediction history (not read from a file) — update it manually when adding new weeks.
 - Tab routing uses URL hash (`#bias`, `#intraday`, `#levels`); switching tabs calls `switchTab(name)`.
 - Color helpers: `cc(v)` → `"bull"/"bear"/"mixed"` CSS class from a regime/confluence string; `dc(v)` → `"bull"/"bear"` from a direction string.
+
+## PDF-Derived Methodology (clauderesources/)
+
+The `clauderesources/` directory contains source PDFs that inform the intraday classification
+math. Each rule below cites the PDF it came from. Functions live in `netlify/functions/lib/options.js`
+and are wired into `netlify/functions/intraday.js`.
+
+- **`classifyWallReaction(level)`** — `walls.pdf`. Per-strike reaction tag from the 4-dimensional
+  table (wall type × DEX sign × Charm sign × Vanna sign). Returns tags like
+  `CALL_WALL_BEARISH_REJECT`, `PUT_WALL_BULLISH_REVERSAL`, `CALL_WALL_BEARISH_BREAKDOWN` (the
+  last is a strength-2 / expansion-likely tag that flags the air-pocket watcher).
+- **`computeAggregateGreeks(levels)`** — sums net Greeks across nearby strikes and returns
+  their signs. Feeds the bias.pdf table.
+- **`applyBiasTable(aggregates, volRegime, priceVsFlip)`** — `bias.pdf`. Returns a primary bias
+  tag like `STRONG_BEARISH_TREND`, `BULLISH_CHOP`, `VOLATILE_EXPANSION`. Trend conditions
+  (negative gamma + concordant charm/vanna) take priority over chop conditions, which take
+  priority over IV-regime conditions, which take priority over price-vs-flip.
+- **`WALL_REACTION_DIR` and `BIAS_TAG_DIR`** — tag-to-`{dir, strength}` maps consumed by the
+  evidence accumulator in `classifyIntradayBias`. Strength-2 tags (squeezes/breakdowns)
+  contribute ±2 to evidence; strength-1 (standard reactions) contribute ±1.
+- **`GAMMA_ASYMMETRY_RATIO = 0.344`** — `2.pdf` (Dim/Eraker/Vilkov 2025, Table 3). Positive-MM-gamma
+  vol-attenuation coefficient is −0.064; negative-MM-gamma vol-amplification coefficient is −0.022;
+  ratio ≈ 0.344. In `classifyIntradayBias`, when `gammaRegime === 'NEGATIVE'`, all evidence is
+  scaled by this ratio toward zero — reflecting that negative-gamma directional signals are ~3×
+  weaker than positive-gamma directional signals.
+- **`PINNING_REGIME_ACTIVE = false`** — `1.pdf` (Elms 2026). Five empirical tests across 2,294
+  trading days find no pinning in modern SPX; high OI is associated with WIDER ranges
+  (amplification regime, p=0.0003). This flag is exported but not yet consumed; the levels
+  are interpreted as amplification triggers rather than pinning anchors. Flip to true if a
+  future NQ-specific calibration shows pinning behavior on NQ.
+
+The intraday response surfaces three new fields: `pdf_primary_bias`, `wall_reaction` (for the top
+wall), and `aggregate_greeks`. Each level in the `levels[]` array now carries its own
+`wall_reaction` field as well.
 
 ## Pending Improvements
 

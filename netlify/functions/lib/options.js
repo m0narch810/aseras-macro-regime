@@ -29,6 +29,9 @@ const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 //   CONTRACTION + POSITIVE is maximum pinning — GEX alone drives 60% of the score.
 //
 // All rows sum to 1.00.
+// ⚠ REGIME_WEIGHTS are theoretically motivated but empirically unvalidated.
+// Calibration requires ≥30 days of logged GEX snapshots with outcome labels.
+// See logs/intraday_inputs_log.jsonl once freeflow_logger.py has been running.
 const REGIME_WEIGHTS = {
   EXPANSION: {
     POSITIVE:  { gex: 0.22, vex: 0.38, charmex: 0.17, oi: 0.14, dag: 0.09 },
@@ -211,6 +214,8 @@ function scoreLevels(strikes, weights, futuresPrice) {
                        oiN[i]*weights.oi   + dagN[i]*weights.dag) * 100;
       const volSens = Math.abs(r.net_vex) / (Math.abs(r.net_gex) + 1e-9);
       const base    = r.net_gex > 0 ? 'CALL WALL' : 'PUT WALL';
+      // walls.pdf reaction tag computed from this strike's Greek signs.
+      const wall_reaction = classifyWallReaction(r);
       return {
         strike_futures: Math.round(r.strike_futures * 10)  / 10,
         strike_etf:     Math.round(r.strike_etf     * 100) / 100,
@@ -223,6 +228,7 @@ function scoreLevels(strikes, weights, futuresPrice) {
         net_dex:        Math.round(r.net_dex),
         net_vegaex:     Math.round(r.net_vegaex),
         total_oi:       Math.round(r.total_oi),
+        wall_reaction,
       };
     })
     .filter(r => r.score >= MIN_SCORE)
@@ -243,10 +249,136 @@ function getWeights(volRegime, gammaRegime) {
   return vr[gammaRegime] || vr.NEAR_FLIP;
 }
 
+// ── PDF-DERIVED METHODOLOGY (clauderesources/) ───────────────────────────────
+// The functions below encode reaction/bias tables from:
+//   - walls.pdf       : per-strike wall reaction by (wall_type, DEX, Charm, Vanna)
+//   - bias.pdf        : aggregate bias by (GEX, Charm, Vanna, IV regime, flip side)
+//   - OPTIONSFLOW.pdf : context (Greek definitions, dealer mechanics)
+//   - Elms 2026 (1.pdf) and Dim/Eraker/Vilkov 2025 (2.pdf): empirical asymmetries
+// They classify *expected behavior* at strikes and in aggregate — to complement
+// the magnitude-only `score` field with directional context.
+
+// Classify a single wall's expected reaction using the walls.pdf interaction
+// table. CALL_WALL vs PUT_WALL determined by net_gex sign. Returns a tag.
+// Source: walls.pdf (Options Flow Wall Logic Tables).
+function classifyWallReaction(level) {
+  if (!level) return null;
+  const isCallWall    = (level.net_gex || 0) > 0;
+  const dexPositive   = (level.net_dex || 0) > 0;
+  const charmPositive = (level.net_charmex || 0) > 0;
+  const vannaPositive = (level.net_vex || 0) > 0;
+
+  if (isCallWall) {
+    if ( dexPositive && !charmPositive && !vannaPositive) return 'CALL_WALL_BEARISH_REJECT';
+    if (!dexPositive && !charmPositive && !vannaPositive) return 'CALL_WALL_BEARISH_BREAKDOWN';
+    if (!dexPositive &&  charmPositive &&  vannaPositive) return 'CALL_WALL_BULLISH_SQUEEZE';
+    if ( dexPositive &&  charmPositive &&  vannaPositive) return 'CALL_WALL_BULLISH_GRIND';
+    return 'CALL_WALL_MIXED';
+  } else {
+    if ( dexPositive &&  charmPositive &&  vannaPositive) return 'PUT_WALL_BULLISH_SUPPORT';
+    if (!dexPositive && !charmPositive && !vannaPositive) return 'PUT_WALL_VULNERABLE';
+    if (!dexPositive &&  charmPositive &&  vannaPositive) return 'PUT_WALL_BULLISH_REVERSAL';
+    if ( dexPositive && !charmPositive && !vannaPositive) return 'PUT_WALL_WEAK_BOUNCE_FADE';
+    return 'PUT_WALL_MIXED';
+  }
+}
+
+// Tag-to-direction map for downstream evidence accumulation.
+// Each wall_reaction tag → { dir: 'BULL'|'BEAR'|'NEUTRAL', strength: 0..2 }
+// strength 2 = breakdown/expansion (highest conviction); 1 = standard reaction; 0 = mixed.
+const WALL_REACTION_DIR = {
+  CALL_WALL_BEARISH_REJECT:    { dir: 'BEAR', strength: 1 },
+  CALL_WALL_BEARISH_BREAKDOWN: { dir: 'BEAR', strength: 2 },
+  CALL_WALL_BULLISH_SQUEEZE:   { dir: 'BULL', strength: 2 },
+  CALL_WALL_BULLISH_GRIND:     { dir: 'BULL', strength: 1 },
+  CALL_WALL_MIXED:             { dir: 'NEUTRAL', strength: 0 },
+  PUT_WALL_BULLISH_SUPPORT:    { dir: 'BULL', strength: 1 },
+  PUT_WALL_VULNERABLE:         { dir: 'BEAR', strength: 2 },
+  PUT_WALL_BULLISH_REVERSAL:   { dir: 'BULL', strength: 2 },
+  PUT_WALL_WEAK_BOUNCE_FADE:   { dir: 'BEAR', strength: 1 },
+  PUT_WALL_MIXED:              { dir: 'NEUTRAL', strength: 0 },
+};
+
+// Aggregate Greek signs across nearby strikes (used for the bias.pdf table).
+// Returns { gex_sign, charm_sign, vanna_sign, dex_sign, totals... } or null.
+function computeAggregateGreeks(levels) {
+  if (!levels || !levels.length) return null;
+  let total_gex = 0, total_charmex = 0, total_vex = 0, total_dex = 0;
+  for (const lv of levels) {
+    total_gex     += lv.net_gex     || 0;
+    total_charmex += lv.net_charmex || 0;
+    total_vex     += lv.net_vex     || 0;
+    total_dex     += lv.net_dex     || 0;
+  }
+  const sgn = x => x > 0 ? 1 : x < 0 ? -1 : 0;
+  return {
+    gex_sign:      sgn(total_gex),
+    charm_sign:    sgn(total_charmex),
+    vanna_sign:    sgn(total_vex),
+    dex_sign:      sgn(total_dex),
+    total_gex:     Math.round(total_gex),
+    total_charmex: Math.round(total_charmex),
+    total_vex:     Math.round(total_vex),
+    total_dex:     Math.round(total_dex),
+  };
+}
+
+// Look up the bias.pdf condition table. Picks the first matching rule.
+// Trend conditions (negative gamma + concordant charm/vanna) win over chop
+// conditions, which win over IV-regime conditions, which win over price-vs-flip.
+// Source: bias.pdf (Options Flow Bias & Wall Logic Tables — Bias section).
+function applyBiasTable(aggregates, volRegime, priceVsFlip) {
+  if (!aggregates) return 'UNKNOWN';
+  const { gex_sign, charm_sign, vanna_sign } = aggregates;
+  if (gex_sign < 0 && charm_sign < 0 && vanna_sign < 0) return 'STRONG_BEARISH_TREND';
+  if (gex_sign < 0 && charm_sign > 0 && vanna_sign > 0) return 'STRONG_BULLISH_TREND';
+  if (gex_sign > 0 && charm_sign > 0 && vanna_sign > 0) return 'BULLISH_CHOP';
+  if (gex_sign > 0 && charm_sign < 0 && vanna_sign < 0) return 'BEARISH_CHOP';
+  if (gex_sign < 0 && volRegime === 'EXPANSION')        return 'VOLATILE_EXPANSION';
+  if (gex_sign > 0 && volRegime === 'CONTRACTION')      return 'COMPRESSION';
+  if (vanna_sign > 0 && volRegime === 'CONTRACTION')    return 'VANNA_BULLISH';
+  if (vanna_sign < 0 && volRegime === 'EXPANSION')      return 'VANNA_BEARISH';
+  if (priceVsFlip > 0)                                  return 'BULLISH_REGIME';
+  if (priceVsFlip < 0)                                  return 'BEARISH_REGIME';
+  return 'NEUTRAL';
+}
+
+// Tag-to-direction for the bias.pdf primary bias.
+const BIAS_TAG_DIR = {
+  STRONG_BEARISH_TREND: { dir: 'BEAR', strength: 2 },
+  STRONG_BULLISH_TREND: { dir: 'BULL', strength: 2 },
+  BULLISH_CHOP:         { dir: 'BULL', strength: 1 },
+  BEARISH_CHOP:         { dir: 'BEAR', strength: 1 },
+  VOLATILE_EXPANSION:   { dir: 'NEUTRAL', strength: 0 },  // direction unknown
+  COMPRESSION:          { dir: 'NEUTRAL', strength: 0 },
+  VANNA_BULLISH:        { dir: 'BULL', strength: 1 },
+  VANNA_BEARISH:        { dir: 'BEAR', strength: 1 },
+  BULLISH_REGIME:       { dir: 'BULL', strength: 1 },
+  BEARISH_REGIME:       { dir: 'BEAR', strength: 1 },
+  NEUTRAL:              { dir: 'NEUTRAL', strength: 0 },
+  UNKNOWN:              { dir: 'NEUTRAL', strength: 0 },
+};
+
+// Dim/Eraker/Vilkov 2025 asymmetry constant (2.pdf, Table 3, col 4):
+// Positive MM gamma's vol-attenuation coefficient = -0.064.
+// Negative MM gamma's vol-amplification coefficient = -0.022.
+// The negative-gamma effect is ~65% smaller, i.e. ratio ≈ 0.022 / 0.064 ≈ 0.344.
+// Use this when scaling evidence between positive- and negative-gamma signals.
+const GAMMA_ASYMMETRY_RATIO = 0.344;
+
+// Elms 2026 finding (1.pdf): modern SPX (and by inference NQ given 0DTE dominance)
+// no longer exhibits pinning. High OI is associated with WIDER, not narrower, ranges
+// (p=0.0003). Set this flag to true if a future per-instrument calibration shows
+// NQ-specific pinning. Default false → walls are treated as amplification triggers
+// when broken, not as range-bound anchors.
+const PINNING_REGIME_ACTIVE = false;
+
 module.exports = {
   FILTER_PCT, MIN_SCORE, VALID_USERS, SESSION_MAX_AGE_MS,
   REGIME_WEIGHTS, AGENT_HEADERS, BASE_HEADERS,
   isAuthorized, fetchJson, httpGetJson, todayET,
   aggregateDataset, computeGammaFlip, normalizeAbs, scoreLevels,
   classifyVolRegime, getWeights,
+  classifyWallReaction, computeAggregateGreeks, applyBiasTable,
+  WALL_REACTION_DIR, BIAS_TAG_DIR, GAMMA_ASYMMETRY_RATIO, PINNING_REGIME_ACTIVE,
 };
