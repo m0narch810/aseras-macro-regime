@@ -1,0 +1,113 @@
+name: GEX 15-min snapshot
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Runs every 15 minutes during the wide UTC envelope that covers both EST and
+# EDT for 03:00-17:00 ET. The Python script's ET-aware check no-ops the runs
+# that fall outside the actual ET active window, so we never persist a
+# snapshot taken at the wrong time.
+#
+#   EST (Nov-Mar): 03:00-17:00 ET = 08:00-22:00 UTC
+#   EDT (Mar-Nov): 03:00-17:00 ET = 07:00-21:00 UTC
+#   Envelope     : 07:00-21:59 UTC, Mon-Fri  →  cron */15 7-21 * * 1-5
+#
+# Snapshots are written to a dedicated `gex-snapshots` branch so master stays
+# clean. The branch is created on first run if it doesn't yet exist.
+#
+# Required GitHub repo secret:
+#   FF_SESSION   — free-flow.site session cookie (same value as your local .env)
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  schedule:
+    - cron: '*/15 7-21 * * 1-5'
+  workflow_dispatch:   # manual trigger from the Actions tab
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0   # need full history to fetch gex-snapshots branch
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-levels-${{ hashFiles('requirements_levels.txt') }}
+          restore-keys: ${{ runner.os }}-pip-levels-
+
+      - name: Install dependencies
+        run: pip install -r requirements_levels.txt
+
+      - name: Pre-populate logs/ from gex-snapshots branch
+        # If the branch exists, restore its logs/ contents so snapshot_index.csv
+        # and per-day levels_YYYY-MM-DD.csv files accumulate across runs instead
+        # of being overwritten by a single-row fresh start.
+        run: |
+          if git ls-remote --exit-code --heads origin gex-snapshots > /dev/null 2>&1; then
+            git fetch origin gex-snapshots
+            git checkout origin/gex-snapshots -- logs/ 2>/dev/null || true
+            echo "Restored logs/ from gex-snapshots branch"
+            ls -la logs/ || true
+          else
+            echo "gex-snapshots branch does not exist yet — will be created"
+          fi
+
+      - name: Take snapshot (one tick)
+        env:
+          FF_SESSION: ${{ secrets.FF_SESSION }}
+        run: python schedule_freeflow_logger.py --once
+
+      - name: Push to gex-snapshots branch
+        run: |
+          set -e
+
+          # Stash the fresh logs/ payload because we're about to switch branches.
+          mkdir -p /tmp/snapshot-payload
+          if [ -d logs ] && [ -n "$(ls -A logs 2>/dev/null)" ]; then
+            cp -r logs/. /tmp/snapshot-payload/
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Switch to gex-snapshots: either fetch existing or create orphan.
+          if git ls-remote --exit-code --heads origin gex-snapshots > /dev/null 2>&1; then
+            git checkout -B gex-snapshots origin/gex-snapshots
+          else
+            git checkout --orphan gex-snapshots
+            git rm -rf . 2>/dev/null || true
+            echo "# GEX snapshots — auto-populated by .github/workflows/gex-snapshot.yml" > README.md
+            git add README.md
+            git commit -m "init gex-snapshots branch" || true
+          fi
+
+          # Restore the payload onto the branch's worktree.
+          mkdir -p logs
+          if [ -n "$(ls -A /tmp/snapshot-payload 2>/dev/null)" ]; then
+            cp -r /tmp/snapshot-payload/. logs/
+          fi
+
+          git add logs/
+          if git diff --cached --quiet; then
+            echo "No changes to commit (outside ET active window or no new data)"
+            exit 0
+          fi
+
+          git commit -m "snapshot $(TZ=America/New_York date +'%Y-%m-%dT%H:%M ET')"
+          git push -u origin gex-snapshots
