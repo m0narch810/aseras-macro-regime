@@ -193,13 +193,22 @@ function normalizeAbs(values) {
   return abs.map(v => (v - mn) / (mx - mn));
 }
 
+// Returns strikes within FILTER_PCT of futures price, with `strike_futures`
+// and `dist_nq` attached. Used by both scoreLevels (which then filters by
+// MIN_SCORE) and by callers that need the broader nearby set for aggregate
+// statistics (e.g. bias.pdf table lookup which should see all proximate
+// strikes, not just the scoring-worthy ones).
+function nearbyStrikes(strikes, futuresPrice) {
+  if (!futuresPrice) return [];
+  return Object.entries(strikes)
+    .map(([sf, s]) => ({ ...s, strike_futures: +sf, dist_nq: +sf - futuresPrice }))
+    .filter(r => Math.abs(r.dist_nq / futuresPrice * 100) <= FILTER_PCT);
+}
+
 // Scores nearby strikes using regime-adjusted weights. Returns strikes above
 // MIN_SCORE sorted descending. Only strikes within FILTER_PCT of futures price.
 function scoreLevels(strikes, weights, futuresPrice) {
-  if (!futuresPrice) return [];
-  const nearby = Object.entries(strikes)
-    .map(([sf, s]) => ({ ...s, strike_futures: +sf, dist_nq: +sf - futuresPrice }))
-    .filter(r => Math.abs(r.dist_nq / futuresPrice * 100) <= FILTER_PCT);
+  const nearby = nearbyStrikes(strikes, futuresPrice);
   if (!nearby.length) return [];
 
   const gexN = normalizeAbs(nearby.map(r => r.net_gex));
@@ -377,7 +386,8 @@ module.exports = {
   FILTER_PCT, MIN_SCORE, VALID_USERS, SESSION_MAX_AGE_MS,
   REGIME_WEIGHTS, AGENT_HEADERS, BASE_HEADERS,
   isAuthorized, fetchJson, httpGetJson, todayET,
-  aggregateDataset, computeGammaFlip, normalizeAbs, scoreLevels,
+  aggregateDataset, computeGammaFlip, normalizeAbs,
+  nearbyStrikes, scoreLevels,
   classifyVolRegime, getWeights,
   classifyWallReaction, computeAggregateGreeks, applyBiasTable,
   WALL_REACTION_DIR, BIAS_TAG_DIR, GAMMA_ASYMMETRY_RATIO, PINNING_REGIME_ACTIVE,

@@ -1,7 +1,7 @@
 const {
   BASE_HEADERS, isAuthorized, fetchJson, httpGetJson,
   AGENT_HEADERS, todayET,
-  aggregateDataset, computeGammaFlip, scoreLevels,
+  aggregateDataset, computeGammaFlip, nearbyStrikes, scoreLevels,
   classifyVolRegime, getWeights,
   computeAggregateGreeks, applyBiasTable,
   WALL_REACTION_DIR, BIAS_TAG_DIR, GAMMA_ASYMMETRY_RATIO,
@@ -556,9 +556,16 @@ exports.handler = async (event) => {
 
     // ── PDF-DERIVED CLASSIFICATIONS ──────────────────────────────────────────
     // walls.pdf reaction tag is attached per-level by scoreLevels(); pick the
-    // tag for the top wall to feed the classifier. Aggregate Greek signs
-    // feed the bias.pdf primary-bias table.
-    const aggregateGreeks = computeAggregateGreeks(levels);
+    // tag for the top wall to feed the classifier.
+    //
+    // Aggregate Greek signs feed the bias.pdf primary-bias table. We compute
+    // these on the FULL proximity-filtered set (nearbyStrikes — strikes within
+    // FILTER_PCT of price) rather than on the post-MIN_SCORE levels list,
+    // because bias.pdf rules describe overall dealer positioning, not just
+    // the scoring-worthy walls. Low-score strikes can still tilt the
+    // aggregate sign when they cluster on one side of price.
+    const _nearbyAll      = nearbyStrikes(strikes, futuresPrice);
+    const aggregateGreeks = computeAggregateGreeks(_nearbyAll);
     const wallReactionTag = topWall ? topWall.wall_reaction : null;
     const priceVsFlip     = flipDiff == null ? 0 : (flipDiff > 0 ? 1 : -1);
     const pdfBiasTag      = applyBiasTable(aggregateGreeks, levelsRegime, priceVsFlip);

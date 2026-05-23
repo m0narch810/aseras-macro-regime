@@ -1,12 +1,36 @@
 #!/usr/bin/env python3
 """
-scripts/09_intraday_bias.py -- intraday NQ bias classifier.
+scripts/09_intraday_bias.py — local Python intraday backtest baseline.
 
-Combines return entropy gate, PCA price structure, options flow
-state (H_GEX_norm, gamma regime, top wall), MM intensification,
-and the weekly macro bias as a fixed prior.
+This script mirrors the original (pre-PDF) intraday classification logic for
+local hindcasting and walk-forward validation (scripts/10_validate_intraday.py).
+It is NOT the production path — the live dashboard calls
+netlify/functions/intraday.js which is the canonical implementation.
 
-Inputs (all strictly past data -- no lookahead):
+What this Python version has:
+  - Return entropy gate (Shannon entropy of 20d log returns)
+  - PCA price structure (8 features → 3 PCs)
+  - Gamma regime (fixed ±50pt NEAR_FLIP_BUFFER)
+  - H_GEX_norm dispersion penalty
+  - Proximity-weighted top wall (PROXIMITY_EFOLD)
+  - Macro confluence prior from bias_output.json
+  - MM intensification from logs/levels_*.csv when available
+
+What this Python version DOES NOT have (only in intraday.js):
+  - Vol-scaled NEAR_FLIP band (max(30, 0.5 × price × IV/100 / sqrt(252)))
+  - bias.pdf primary-bias table lookup
+  - walls.pdf per-strike reaction tags
+  - Dim/Eraker/Vilkov gamma asymmetry scaling
+  - PC1 momentum-validity guard
+
+These were intentionally not ported because the Python script is used for
+hindcasting historical snapshots where (a) IV history isn't available and
+(b) adding them would couple the backtest to walls.pdf interpretation rules
+that need to be tested in isolation first. Once logs/ has enough labeled
+data, walk-forward validation can compare the Python baseline to a
+version that adds each PDF-derived signal one at a time.
+
+Inputs (all strictly past data — no lookahead):
   data/processed/NQ_daily_clean.csv
   bias_output.json
   /.netlify/functions/levels  OR  levels_data.json
@@ -25,8 +49,7 @@ import json
 import logging
 import os
 import pickle
-import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -67,9 +90,16 @@ REFIT_INTERVAL        = 63      # trading days between PCA refits
 STRONG_WALL           = 60.0    # score threshold for strong wall
 EXCEPTIONAL_WALL      = 75.0    # score threshold for exceptional wall
 NEAR_FLIP_BUFFER      = 50.0    # NQ points either side of flip for NEAR_FLIP
+                                # NOTE: production (intraday.js) uses a vol-scaled band
+                                # max(30, 0.5 × price × IV/100 / sqrt(252)). This Python
+                                # backtest uses the fixed 50 pts because historical IV
+                                # is not in the snapshot logs. Re-add vol scaling here if
+                                # logs/levels_*.csv ever includes an IV column.
 AIR_POCKET_PROXIMITY  = 150.0   # NQ points: wall must be within this of flip
-H_GEX_CONFIDENCE_CUT  = 0.6    # H_GEX_norm above this penalizes confidence
-PROXIMITY_HALFLIFE    = 200.0   # NQ points for proximity-weighted wall scoring
+H_GEX_CONFIDENCE_CUT  = 0.6     # H_GEX_norm above this penalizes confidence
+PROXIMITY_EFOLD       = 200.0   # NQ points — e-folding scale for proximity-weighted
+                                # wall scoring (true halflife = 200 × ln(2) ≈ 139 pts).
+                                # Matches intraday.js PROXIMITY_EFOLD.
 
 MACRO_BULL = {"STRONG BULL", "LEAN BULL"}
 MACRO_BEAR = {"STRONG BEAR", "LEAN BEAR"}
@@ -328,7 +358,7 @@ def compute_gamma_regime(nq_price: float, gamma_flip: float | None) -> str:
 def compute_top_wall(levels: list, nq_price: float) -> dict | None:
     """
     Identify the most significant nearby wall using a proximity-weighted score.
-    proximity_weight = exp(-|dist_nq| / PROXIMITY_HALFLIFE)
+    proximity_weight = exp(-|dist_nq| / PROXIMITY_EFOLD)
     weighted_score = score * proximity_weight
     Returns the level with highest weighted_score.
     """
@@ -339,7 +369,7 @@ def compute_top_wall(levels: list, nq_price: float) -> dict | None:
     for lv in levels:
         dist    = abs(lv.get("dist_nq", 9999))
         score   = lv.get("score", 0.0)
-        weight  = np.exp(-dist / PROXIMITY_HALFLIFE)
+        weight  = np.exp(-dist / PROXIMITY_EFOLD)
         wscore  = score * weight
         if wscore > best_wscore:
             best_wscore = wscore

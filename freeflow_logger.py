@@ -25,9 +25,7 @@ OR run manually:
   python freeflow_logger.py --schedule # runs continuously and waits for snapshot times
 """
 
-import requests
-import pandas as pd
-from datetime import datetime, date, timedelta, time as dtime
+from datetime import datetime, time as dtime
 import os
 import sys
 import json
@@ -47,7 +45,6 @@ from freeflow_levels import (
     classify_regime,
     score_levels,
     get_trading_days,
-    SYMBOL,
 )
 
 # ============================================================
@@ -74,21 +71,30 @@ os.makedirs(LOG_DIR, exist_ok=True)
 # LOGGING
 # ============================================================
 
-def is_trading_day():
-    """Simple check — Mon-Fri. Does not account for holidays."""
-    return date.today().weekday() < 5
-
-
 def current_et():
     return datetime.now(ET)
 
 
+def is_trading_day():
+    """Simple check — Mon-Fri in ET. Does not account for holidays.
+
+    Uses ET explicitly (not system local time) so this is correct when run on
+    UTC-based CI runners at Friday/Monday boundaries.
+    """
+    return current_et().weekday() < 5
+
+
 def is_snapshot_time():
-    """Returns (True, label) if within window of a snapshot time."""
-    now = current_et().time()
+    """Returns (True, label) if within window of a snapshot time.
+
+    All times compared in ET (matches SNAPSHOT_TIMES). No system local time.
+    """
+    et_now = current_et()
+    today_et = et_now.date()
+    now = et_now.time()
     for snap in SNAPSHOT_TIMES:
-        snap_dt   = datetime.combine(date.today(), snap)
-        now_dt    = datetime.combine(date.today(), now)
+        snap_dt   = datetime.combine(today_et, snap)
+        now_dt    = datetime.combine(today_et, now)
         diff_mins = abs((now_dt - snap_dt).total_seconds()) / 60
         if diff_mins <= WINDOW_MINUTES:
             return True, snap.strftime('%H%M')
@@ -96,8 +102,12 @@ def is_snapshot_time():
 
 
 def already_logged_today(label):
-    """Prevent double-logging if script runs multiple times in the window."""
-    today  = date.today().strftime('%Y-%m-%d')
+    """Prevent double-logging if script runs multiple times in the window.
+
+    Uses ET date so the marker filename matches the ET trading day, not the
+    UTC date the CI runner happens to be on.
+    """
+    today  = current_et().strftime('%Y-%m-%d')
     marker = os.path.join(LOG_DIR, f'.logged_{today}_{label}')
     if os.path.exists(marker):
         return True
@@ -145,9 +155,9 @@ def build_snapshot():
 
 
 def save_snapshot(df, label):
-    """Append snapshot to today's CSV log."""
+    """Append snapshot to today's CSV log (ET date, not UTC)."""
     os.makedirs(LOG_DIR, exist_ok=True)
-    today   = date.today().strftime('%Y-%m-%d')
+    today   = current_et().strftime('%Y-%m-%d')
     fpath   = os.path.join(LOG_DIR, f'levels_{today}.csv')
 
     cols = [

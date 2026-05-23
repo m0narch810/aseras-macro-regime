@@ -103,7 +103,17 @@ jobs:
             cp -r /tmp/snapshot-payload/. logs/
           fi
 
+          # Only commit if a meaningful file changed — not just the .gitkeep
+          # being carried over on the first orphan-branch commit. Real snapshots
+          # write logs/levels_YYYY-MM-DD.csv plus updates to snapshot_index.csv
+          # and intraday_inputs_log.jsonl, all of which match this glob.
           git add logs/
+          MEANINGFUL=$(git diff --cached --name-only | grep -E 'logs/(levels_|snapshot_index|intraday_inputs_log)' || true)
+          if [ -z "$MEANINGFUL" ]; then
+            echo "No meaningful snapshot files changed (only .gitkeep / README) — skipping commit."
+            git reset HEAD logs/ 2>/dev/null || true
+            exit 0
+          fi
           if git diff --cached --quiet; then
             echo "No changes to commit (outside ET active window or no new data)"
             exit 0
