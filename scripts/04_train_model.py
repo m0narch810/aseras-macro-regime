@@ -263,12 +263,22 @@ print("\n" + "="*60)
 print("  PART 3: VOLATILITY FORECAST MODEL")
 print("="*60)
 
-ALL_FEATURES = list(set(PRICE_FEATURES + [
+def _dedup_ordered(seq):
+    """Deterministic de-dup preserving insertion order. Replaces list(set(...))
+    which produces nondeterministic order due to Python hash randomisation."""
+    seen, out = set(), []
+    for x in seq:
+        if x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
+
+ALL_FEATURES = _dedup_ordered(PRICE_FEATURES + [
     "net_liq", "net_liq_wow", "net_liq_4w",
     "vix", "vix_wow", "vix_4w",
     "us10y", "us10y_wow", "us10y_4w",
     "dxy", "dxy_wow", "dxy_4w",
-]))
+])
 ALL_FEATURES = [c for c in ALL_FEATURES if c in df_binary.columns]
 
 vol_reg = xgb.XGBRegressor(

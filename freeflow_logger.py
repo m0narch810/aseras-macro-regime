@@ -30,6 +30,7 @@ import pandas as pd
 from datetime import datetime, date, timedelta, time as dtime
 import os
 import sys
+import json
 import time as time_module
 import pytz
 
@@ -65,6 +66,9 @@ SNAPSHOT_TIMES = [
 WINDOW_MINUTES = 4   # How many minutes either side of target to accept
 N_EXPIRIES     = 3   # Expiries to aggregate
 LOG_DIR        = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+
+# Ensure logs/ exists at module load — required by both snapshot save and JSONL audit.
+os.makedirs(LOG_DIR, exist_ok=True)
 
 # ============================================================
 # LOGGING
@@ -159,6 +163,22 @@ def save_snapshot(df, label):
     write_header = not os.path.exists(fpath)
     df[cols].to_csv(fpath, mode='a', header=write_header, index=False)
     print(f"  Saved {len(df)} rows → {fpath}")
+
+    # Append intraday-bias audit line: a JSONL marker that this snapshot exists.
+    # Once 30+ days of data accumulate, these markers can be joined to next-day
+    # outcomes to calibrate STRONG_WALL, EXCEPTIONAL_WALL, PROXIMITY_EFOLD,
+    # and REGIME_WEIGHTS.
+    audit_path = os.path.join(LOG_DIR, 'intraday_inputs_log.jsonl')
+    now_et = current_et()
+    audit_rec = {
+        'timestamp': now_et.isoformat(),
+        'date':      now_et.strftime('%Y-%m-%d'),
+        'source':    'freeflow_logger',
+        'note':      'raw_snapshot — intraday bias inputs to be correlated with outcomes',
+    }
+    with open(audit_path, 'a') as f:
+        f.write(json.dumps(audit_rec) + '\n')
+
     return fpath
 
 

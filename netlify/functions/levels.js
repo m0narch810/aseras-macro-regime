@@ -43,7 +43,19 @@ exports.handler = async (event) => {
     // Compute flip + gamma regime first so weights can use both axes.
     const gammaFlip   = computeGammaFlip(strikes, futuresPrice);
     const diff        = futuresPrice != null && gammaFlip != null ? futuresPrice - gammaFlip : null;
-    const gammaRegime = diff == null ? 'UNKNOWN' : diff > 50 ? 'POSITIVE' : diff < -50 ? 'NEGATIVE' : 'NEAR_FLIP';
+
+    // Vol-scaled gamma regime band: 0.5 × IV-implied daily move
+    // If IV is unavailable, fall back to fixed 50 pts.
+    // Derivation: daily_1sd = futuresPrice × (IV/100) / sqrt(252)
+    //             band = 0.5 × daily_1sd
+    // This makes NEAR_FLIP adaptive — wider when vol is high, tighter when low.
+    const _ivBand = (iv != null && iv > 0 && futuresPrice != null)
+      ? Math.max(30, 0.5 * futuresPrice * (iv / 100) / Math.sqrt(252))
+      : 50;
+    const gammaRegime = diff == null ? 'UNKNOWN'
+      : diff >  _ivBand ? 'POSITIVE'
+      : diff < -_ivBand ? 'NEGATIVE'
+      : 'NEAR_FLIP';
 
     const volRegime = classifyVolRegime(iv, rvIvRatio);
     const weights   = getWeights(volRegime, gammaRegime);

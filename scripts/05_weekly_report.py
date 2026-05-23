@@ -1,6 +1,7 @@
 import io
 import os
 import sys
+import subprocess
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -18,6 +19,28 @@ PROC_DIR  = os.path.join(BASE_DIR, "data", "processed")
 MODEL_DIR = os.path.join(BASE_DIR, "models")
 
 LIVE_MODE = "--live" in sys.argv
+
+# ── COT STALENESS CHECK ──────────────────────────────────────
+# COT data must be refreshed weekly. If the most recent non-NaN
+# COT row is more than 9 days old, refuse to run a live report
+# without first refreshing.
+_cot_path = os.path.join(PROC_DIR, 'cot_NQ.csv')
+if os.path.exists(_cot_path):
+    _cot = pd.read_csv(_cot_path, parse_dates=[0])
+    _last_cot_date = pd.to_datetime(_cot.iloc[:, 0]).dropna().max()
+    _days_stale = (pd.Timestamp.now() - _last_cot_date).days
+    if _days_stale > 9:
+        print(f"⚠ COT data is {_days_stale} days stale (last: {_last_cot_date.date()}).")
+        print("  Running 07_cot_features.py to refresh...")
+        result = subprocess.run(
+            [sys.executable, os.path.join(BASE_DIR, 'scripts', '07_cot_features.py')],
+            capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            print(f"  ✗ COT refresh failed:\n{result.stderr}")
+            print("  Proceeding with stale COT data — mark live output as STALE.")
+        else:
+            print("  ✓ COT refreshed successfully.")
 
 # ── LOAD SAVED MODELS ─────────────────────────────────────────
 print("Loading models...")
