@@ -3,6 +3,8 @@
 const VALID_USERS = {
   // aseras
   "aseras": "1df6106046101d8351881262131311974c170c7e12195cf3bbee3d210fded14e",
+  // awsame303
+  "awsame303": "9ec0dbe01c3bfdb683df0e31db6fb99e033996fa15fe39f4f469950db816e0ee"
 };
 
 const SESSION_KEY = "vanta_session";
