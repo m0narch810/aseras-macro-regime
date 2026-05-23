@@ -728,6 +728,38 @@ footer .alph { color: rgba(255,255,255,0.55); }
   color: var(--text);
 }
 
+.lvl-alert {
+  display: flex; flex-direction: column; gap: 8px;
+  margin-bottom: 14px; padding: 12px 14px;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.025);
+  font-size: 11px;
+}
+.lvl-alert.bull-side { border-left-color: var(--bull); }
+.lvl-alert.bear-side { border-left-color: var(--bear); }
+.lvl-alert-row {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+}
+.lvl-alert-lbl {
+  font-family: 'Syne', sans-serif;
+  font-size: 9px; letter-spacing: 0.22em;
+  text-transform: uppercase; color: var(--ghost);
+  min-width: 86px;
+}
+.lvl-alert-main {
+  font-weight: 700; color: var(--text); letter-spacing: 0.04em;
+}
+.lvl-alert-meta {
+  color: var(--muted); font-size: 10px;
+}
+.lvl-alert-approach {
+  font-family: 'Syne', sans-serif;
+  font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--accent); margin-left: auto;
+}
+
 </style>
 </head>
 <body>
@@ -1059,6 +1091,91 @@ function typeTagClass(net_gex) {
 const lvlSort = { col: "score", dir: "desc" };
 let _lvlData = null;
 
+// ── LEVELS ALERT THRESHOLDS ───────────────────────
+// STRONG_WALL_FRONT mirrors STRONG_WALL in netlify/functions/intraday.js (60).
+// APPROACH_THRESHOLD: within this many NQ points → show reversal target.
+// MIN_TARGET_DISTANCE: reversal target must be at least this far from price.
+const STRONG_WALL_FRONT   = 60;
+const APPROACH_THRESHOLD  = 40;
+const MIN_TARGET_DISTANCE = 80;
+
+// Pick the nearest strong wall to current price and the best opposing reversal
+// target on the other side of price (≥ MIN_TARGET_DISTANCE away).
+function buildLevelAlert(levels, nqPrice) {
+  if (!levels || !levels.length || nqPrice == null) return null;
+
+  const usable = levels.filter(function(l) { return l.dist_nq != null && l.score != null; });
+  if (!usable.length) return null;
+
+  const strong = usable.filter(function(l) { return l.score >= STRONG_WALL_FRONT; });
+  const pool   = strong.length ? strong : usable;
+
+  const watched = pool.slice().sort(function(a, b) {
+    return Math.abs(a.dist_nq) - Math.abs(b.dist_nq);
+  })[0];
+  if (!watched) return null;
+
+  const above   = watched.dist_nq > 0;
+  const absDist = Math.abs(watched.dist_nq);
+
+  // Reversal target sits on the OPPOSITE side of price from the watched wall:
+  // wall above (resistance) → target below; wall below (support) → target above.
+  const wantBelow = above;
+  const candidates = usable.filter(function(l) {
+    if (l === watched) return false;
+    if (Math.abs(l.dist_nq) < MIN_TARGET_DISTANCE) return false;
+    return wantBelow ? l.dist_nq < 0 : l.dist_nq > 0;
+  });
+  const strongCands = candidates.filter(function(c) { return c.score >= STRONG_WALL_FRONT; });
+  const targetPool  = strongCands.length ? strongCands : candidates;
+  const target = targetPool.length
+    ? targetPool.slice().sort(function(a, b) { return b.score - a.score; })[0]
+    : null;
+
+  return {
+    watched: watched,
+    absDist: absDist,
+    above:   above,
+    approaching: absDist <= APPROACH_THRESHOLD,
+    target:  target,
+  };
+}
+
+function renderLevelAlert(alert) {
+  if (!alert) return null;
+  const sideCls = alert.above ? "bear-side" : "bull-side";
+  const box = el("div", {className: "lvl-alert " + sideCls});
+
+  function row(lbl, level, distAbove) {
+    const r = el("div", {className: "lvl-alert-row"});
+    r.appendChild(el("div", {className: "lvl-alert-lbl"}, lbl));
+    const arrow = distAbove ? "▲" : "▼";
+    const aColor = distAbove ? "var(--bear)" : "var(--bull)";
+    r.appendChild(el("span", {style:{color: aColor, fontWeight:"700"}}, arrow + " "));
+    r.appendChild(el("span", {className: "lvl-alert-main"},
+      String(level.type || "WALL") + "  @  " +
+      (level.strike_futures != null ? level.strike_futures.toFixed(1) : "—")
+    ));
+    r.appendChild(el("span", {className: "lvl-alert-meta"},
+      Math.abs(level.dist_nq).toFixed(0) + " pts " + (distAbove ? "above" : "below") +
+      " · score " + (level.score != null ? level.score.toFixed(0) : "—")
+    ));
+    return r;
+  }
+
+  const headRow = row("Watching", alert.watched, alert.above);
+  if (alert.approaching) {
+    headRow.appendChild(el("span", {className: "lvl-alert-approach"}, "approaching"));
+  }
+  box.appendChild(headRow);
+
+  if (alert.approaching && alert.target) {
+    box.appendChild(row("Target on reversal", alert.target, alert.target.dist_nq > 0));
+  }
+
+  return box;
+}
+
 // ── BUILD LEVEL ROW ───────────────────────────────
 function makeLvlRow(lvl) {
   const tr = el("tr");
@@ -1217,6 +1334,9 @@ function renderLevels(d) {
   refreshBar.appendChild(el("div", {id:"levels-refresh-countdown", className:"refresh-countdown"}, ""));
   app.appendChild(refreshBar);
 
+  const alertNode = renderLevelAlert(buildLevelAlert(levels, d.nq_price));
+  if (alertNode) app.appendChild(alertNode);
+
   // ── SUPPORT / RESISTANCE PANELS ──
   const support    = levels.filter(function(l) { return l.net_gex <= 0; })
                            .sort(function(a, b) { return b.score - a.score; });
@@ -1322,11 +1442,11 @@ function msUntilNextMacroUpdate() {
   return targetEtDate.getTime() - etOffset * 3600000 - now.getTime();
 }
 
-function getNextFiveMinuteMark() {
+function getNextLevelsRefreshMark() {
   const now  = new Date();
   const next = new Date(now);
   const m    = next.getMinutes();
-  const nm   = Math.ceil((m * 60 + next.getSeconds() + 1) / 300) * 300;
+  const nm   = Math.ceil((m * 60 + next.getSeconds() + 1) / 120) * 120;
   next.setMinutes(0, nm, 0);
   return next;
 }
@@ -1336,7 +1456,7 @@ function updateLevelsStatus() {
   const updatedEl   = document.getElementById("levels-last-updated");
   if (!countdownEl) return;
 
-  const remaining = getNextFiveMinuteMark() - Date.now();
+  const remaining = getNextLevelsRefreshMark() - Date.now();
   countdownEl.textContent = "Next refresh in " + formatDuration(remaining);
   countdownEl.style.color = "var(--text)";
 
@@ -1347,7 +1467,7 @@ function updateLevelsStatus() {
 
 function scheduleNextRefresh() {
   if (levelsRefreshTimeout) clearTimeout(levelsRefreshTimeout);
-  const ms = getNextFiveMinuteMark() - Date.now();
+  const ms = getNextLevelsRefreshMark() - Date.now();
   levelsRefreshTimeout = setTimeout(function() {
     loadLevels();
     scheduleNextRefresh();
