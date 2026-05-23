@@ -69,8 +69,8 @@ INTERVAL_MINUTES  = 5
 WEEKEND_DAYS      = {5, 6}          # Saturday, Sunday
 LOG_DIR           = os.path.join(BASE_DIR, 'logs')
 INDEX_PATH        = os.path.join(LOG_DIR, 'snapshot_index.csv')
-INDEX_COLUMNS     = ['snapshot_timestamp_et', 'snapshot_file',
-                     'outcome_nq_close', 'outcome_recorded']
+INDEX_COLUMNS     = ['snapshot_timestamp_et', 'intended_timestamp_et',
+                     'snapshot_file', 'outcome_nq_close', 'outcome_recorded']
 
 os.makedirs(LOG_DIR, exist_ok=True)
 
@@ -109,6 +109,18 @@ def fmt_ts(now_et):
     return now_et.strftime('%Y-%m-%dT%H:%M:%S') + ' ET'
 
 
+def intended_tick(now_et):
+    """Snap `now_et` down to the nearest INTERVAL_MINUTES boundary.
+    Used to give every snapshot a clean grid-aligned timestamp regardless of
+    runner drift, so outcomes can be joined on the exact intended tick.
+    """
+    aligned = now_et.replace(
+        minute=(now_et.minute // INTERVAL_MINUTES) * INTERVAL_MINUTES,
+        second=0, microsecond=0,
+    )
+    return aligned
+
+
 # ── SNAPSHOT INDEX ────────────────────────────────────────────────────────────
 def ensure_index_header():
     """Write the index header if the file does not yet exist."""
@@ -119,28 +131,34 @@ def ensure_index_header():
         w.writerow(INDEX_COLUMNS)
 
 
-def append_index_row(ts_et_str, snapshot_file):
+def append_index_row(ts_et_str, intended_et_str, snapshot_file):
     """One row per snapshot; outcome columns stay empty for the calibration job."""
     ensure_index_header()
     with open(INDEX_PATH, 'a', newline='') as f:
         w = csv.writer(f)
-        w.writerow([ts_et_str, snapshot_file, '', ''])
+        w.writerow([ts_et_str, intended_et_str, snapshot_file, '', ''])
 
 
 # ── SNAPSHOT ──────────────────────────────────────────────────────────────────
 def take_snapshot(now_et):
     """Build, stamp, save, and index a snapshot. Returns the saved file path."""
-    ts_str = fmt_ts(now_et)
-    label  = now_et.strftime('%H%M')
-    print(f"  [{ts_str}] Building snapshot (label={label})...")
+    ts_str        = fmt_ts(now_et)
+    intended_str  = fmt_ts(intended_tick(now_et))
+    label         = now_et.strftime('%H%M')
+    print(f"  [{ts_str}] Building snapshot (label={label}, intended={intended_str})...")
 
     df, futures_price, spot_etf, ctx, regime = ffl.build_snapshot()
-    # Override freeflow_logger's plain timestamp with the ET-tagged format.
-    df['timestamp'] = ts_str
+    # Override freeflow_logger's plain timestamp with the ET-tagged format and
+    # add the grid-aligned intended tick so post-hoc joins don't have to
+    # round-and-pray.
+    df['timestamp']           = ts_str
+    df['intended_timestamp']  = intended_str
+    df['snapshot_date']       = now_et.strftime('%Y-%m-%d')
+    df['snapshot_weekday']    = now_et.strftime('%a')
 
     ffl.print_summary(df, futures_price, spot_etf, ctx, regime, label)
     snapshot_file = ffl.save_snapshot(df, label)
-    append_index_row(ts_str, snapshot_file)
+    append_index_row(ts_str, intended_str, snapshot_file)
     print(f"  [{ts_str}] Indexed → {INDEX_PATH}")
     return snapshot_file
 

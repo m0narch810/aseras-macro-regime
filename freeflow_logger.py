@@ -320,7 +320,8 @@ def save_snapshot(df, label):
 
     cols = [
         # Snapshot context (duplicated on every row)
-        'timestamp', 'session_label', 'expiry',
+        'timestamp', 'intended_timestamp', 'snapshot_date', 'snapshot_weekday',
+        'session_label', 'expiry',
         'nq_price', 'qqq_price', 'gamma_flip', 'gamma_regime', 'vol_regime',
         'iv', 'rv_iv_ratio', 'hv5', 'hv10', 'hv21', 'hv63',
         # Strike geometry
