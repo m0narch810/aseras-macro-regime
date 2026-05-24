@@ -25,7 +25,7 @@ data, math, and surface in the dashboard.
 │  LAYER 3 — LEVELS SCORING (live, every ~5 min)                          │
 │  netlify/functions/levels.js (handler) + lib/options.js (math)          │
 │  Per-strike GEX/VEX/CharmEX/DAG/OI scoring, vol×gamma regime weights    │
-│  walls.pdf reaction tag per level                                       │
+│  Per-level wall reaction tag (private methodology table)                │
 │  Surface: dashboard #levels tab, /.netlify/functions/levels             │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -36,7 +36,7 @@ data, math, and surface in the dashboard.
 |---|---|---|---|
 | 1 — Macro weekly | 10/13 = 76.9% (Feb-May 2026) | Significant vs 50% random (p=0.026); NOT significant vs 56.2% bull base rate (p=0.067) | Borderline; n=13 too small |
 | 2 — Intraday | Untested on outcomes | Theory-grounded (gamma regime: Dim 2025; entropy gate: regime-switching lit) | No — needs ≥30 days of labeled snapshots |
-| 3 — Levels | Untested on outcomes | walls.pdf table is theory; modern SPX shows amplification not pinning (Elms 2026) | No — same data gap |
+| 3 — Levels | Untested on outcomes | Reaction table is theory; modern SPX shows amplification not pinning (Elms 2026) | No — same data gap |
 
 ---
 
@@ -48,7 +48,7 @@ data, math, and surface in the dashboard.
 | Score blind historical predictions | `scripts/06_check_accuracy.py` → `data/processed/weekly_accuracy_log.csv` |
 | Understand intraday classification logic | `netlify/functions/intraday.js` (canonical) |
 | Understand per-level scoring math | `netlify/functions/lib/options.js` |
-| See the walls.pdf / bias.pdf source rules | `clauderesources/` |
+| See private methodology source PDFs | `clauderesources/` (gitignored) |
 | Trigger a snapshot manually | Actions tab → "GEX 15-min snapshot" → Run workflow |
 | Run the local logger daemon | `python schedule_freeflow_logger.py` |
 | Look at intraday backtest | `scripts/09_intraday_bias.py` + `scripts/10_validate_intraday.py` |
@@ -198,9 +198,7 @@ indexed by (volRegime, gammaRegime).
 
 **Per-level extras attached by `scoreLevels`:**
 - `type`: `"CALL WALL"` or `"PUT WALL"` + ` + VOL SENSITIVE` if `|VEX| / |GEX| > 2.0`
-- `wall_reaction`: walls.pdf tag from `classifyWallReaction(level)` — one of
-  `CALL_WALL_{BEARISH_REJECT,BEARISH_BREAKDOWN,BULLISH_SQUEEZE,BULLISH_GRIND,MIXED}` or
-  `PUT_WALL_{BULLISH_SUPPORT,VULNERABLE,BULLISH_REVERSAL,WEAK_BOUNCE_FADE,MIXED}`
+- `wall_reaction`: tag from `classifyWallReaction(level)` (private reaction table)
 
 **Constants:**
 - `FILTER_PCT = 5.0` — strikes within ±5% of futures price
@@ -211,46 +209,47 @@ indexed by (volRegime, gammaRegime).
 
 ---
 
-## PDF-Derived Methodology (clauderesources/)
+## Methodology Sources (clauderesources/, gitignored)
 
-Source PDFs that inform Layer 2 and Layer 3:
+Private source PDFs informing Layer 2 (RTH) and Layer 3 (Levels) rules. Contents
+are not described here — they are owner-only. Files are gitignored; do not
+reference filenames or specific framework content in committed code.
 
-| PDF | What it provides |
-|---|---|
-| `bias.pdf` | Aggregate bias rules: (GEX sign × Charm sign × Vanna sign × IV regime × flip side) → primary bias tag |
-| `walls.pdf` | Per-wall reaction table: (wall type × DEX × Charm × Vanna) → expected behavior |
-| `OPTIONSFLOW.pdf` | Glossary / mechanics: Greek definitions, dealer hedging, GEX/DEX/VEX/TEX explanations |
-| `1.pdf` (Elms 2026) | Empirical: modern SPX shows AMPLIFICATION not pinning. High OI ↔ wider ranges (p=0.0003) |
-| `2.pdf` (Dim/Eraker/Vilkov 2025) | Empirical: MM 0DTE net gamma positive on avg; positive-gamma attenuation ~3× stronger than negative-gamma amplification |
-| `3.pdf` (Garmash 2024) | Confirms gamma-regime → mean-reversion vs momentum mapping |
-| `daily macro bias by dxrk.pdf` | RTH macro 5-factor framework: 2Y yield, TGA/RRP, COT crowding, BOJ signal, surprise mechanism |
-| `weekly macro bias by dxrk.pdf` | Weekly HTF methodology: fed stance, COT extremes, net liquidity, yield curve, cross-asset divergence |
-| `how to predict market open by dxrk.pdf` | 4 open archetypes (TYPE_A/B/C/D), manipulation tells, DEX-vs-open-move framework |
-| `market_definitive_research.pdf` | Chapter 10: NY AM Daily Prediction Protocol (-9 to +9 scoring); 5-phase framework |
+Published empirical references that inform a few generic constants in
+`lib/options.js`:
+- Elms 2026 — SPX amplification vs pinning regime
+- Dim/Eraker/Vilkov 2025 — MM 0DTE gamma asymmetry (source of `GAMMA_ASYMMETRY_RATIO = 0.344`)
+- Garmash 2024 — gamma regime ↔ mean-reversion/momentum mapping
 
 **Helpers in `lib/options.js`:**
-- `classifyWallReaction(level)` — walls.pdf table → wall_reaction tag
+- `classifyWallReaction(level)` — private reaction table → `wall_reaction` tag
 - `computeAggregateGreeks(strikeArr)` — sign triple + totals across the passed set
-- `applyBiasTable(aggregates, volRegime, priceVsFlip)` — bias.pdf table → primary bias tag
+- `applyBiasTable(aggregates, volRegime, priceVsFlip)` — private bias table → primary bias tag
 - `WALL_REACTION_DIR` / `BIAS_TAG_DIR` — tag → `{dir: BULL/BEAR/NEUTRAL, strength: 0/1/2}` maps
 - `GAMMA_ASYMMETRY_RATIO = 0.344` — from Dim et al. Table 3 (-0.022 / -0.064 = 0.344)
 - `PINNING_REGIME_ACTIVE = false` — from Elms 2026; exported but not yet consumed by logic
 
-**New helpers in `netlify/functions/intraday.js` (RTH Bias layer):**
-- `classify2YSignal(bars)` — 5-day ROC of SHY ETF → RISING_FAST / RISING / STABLE / FALLING / UNAVAILABLE
-- `classifyBOJSignal(bars)` — 3-day ROC of USDJPY=X → CARRY_UNWIND / YEN_STABLE / YEN_WEAKENING / UNAVAILABLE
-- `getLiquidityTrend(macroBiasData)` — reads `net_liq_wow` factor score from bias_output.json
-- `getCotLabel(macroBiasData)` — reads `nq_lev_pctile` from bias_output.json → FUMES_LONG / NEUTRAL / EXTREME_SHORT
-- `classifyRTHBias({yieldSignal, liquidityTrend, cotLabel, bojSignal, macroConfluence})` — 5-factor RTH verdict
-- `classifyOpenArchetype({gammaFlip, futuresPrice, aggregateGreeks, levels, ivBand})` — scores 4 open types (TYPE_A/B/C/D), returns winner + confidence 0-5
-- `getConfig()` — lazy-loads methodology_config.js (gitignored) or METHODOLOGY_CONFIG env var or empty fallback
+**Helpers in `netlify/functions/intraday.js` (RTH layer):**
+- `classify2YSignal(bars)` — short-rate proxy ROC → RISING_FAST / RISING / STABLE / FALLING / UNAVAILABLE
+- `classifyBOJSignal(bars)` — carry proxy ROC → CARRY_UNWIND / YEN_STABLE / YEN_WEAKENING / UNAVAILABLE
+- `getLiquidityTrend(data)` / `getCotLabel(data)` — derive from `bias_output.json`
+- `classifyRTHBias(inputs)` — weighted multi-factor verdict
+- `classifyOpenArchetype(inputs)` — scores four open types (`TYPE_A/B/C/D`) on GEX structure
+- `getMacroBiasData()` — live-fetches `bias_output.json` from GitHub (10-min cache, bundled fallback)
+- `getConfig()` — lazy-loads private label config (env var → gitignored file → empty fallback)
 
-**Methodology config privacy model:**
-- `netlify/functions/lib/methodology_config.js` — **gitignored**; contains archetype names, descriptions, action text, RTH factor labels (dxrk framework specifics)
-- `netlify/functions/lib/methodology_config.example.js` — **committed** skeleton with empty strings; shows structure only
-- Production Netlify: set `METHODOLOGY_CONFIG` env var to base64-encoded JSON of the real config
-- Committed intraday.js code uses abstract `TYPE_A/B/C/D` labels; display text injected at runtime
-- `scripts/methodology_config.py` — **gitignored**; Python counterpart (weekly report narrative labels, not yet implemented)
+**Privacy model:**
+- `netlify/functions/lib/methodology_config.js` — **gitignored**; contains all display
+  text (type names/descriptions/action strings, factor labels). Real content is
+  owner-only.
+- `netlify/functions/lib/methodology_config.example.js` — **committed** skeleton
+  with empty strings; structure only.
+- Production: `METHODOLOGY_CONFIG` env var on Netlify holds the base64-encoded
+  config; loaded at runtime by `getConfig()`.
+- Committed code uses abstract codes (`TYPE_A/B/C/D`, `FUMES_LONG`, etc.) — no
+  comments explain framework meaning.
+- `scripts/methodology_config.py` — **gitignored**; Python counterpart (not yet implemented).
+- `clauderesources/` — **gitignored**; all source PDFs live here.
 
 ---
 
@@ -307,8 +306,8 @@ at 10 PM UTC. Schema: `meta`, `confluence`, `macro_regime`, `price_model`, `vol_
   NOT significant vs the 56.2% bull base rate — equities drift up)
 
 **What's theory-grounded but uncalibrated on NQ:**
-- bias.pdf primary-bias rules (rules from vendor methodology, untested on NQ outcomes)
-- walls.pdf per-wall reaction tags (same)
+- Primary-bias rules (private methodology, untested on NQ outcomes)
+- Per-wall reaction tags (same)
 - Shannon entropy threshold at 75th percentile of rolling 252-day window
 - PCA pc1_momentum_valid threshold at 0.3 combined |loadings|
 - `STRONG_WALL = 60`, `EXCEPTIONAL_WALL = 75`, `H_GEX_CONFIDENCE_CUT = 0.6`
@@ -328,7 +327,7 @@ at 10 PM UTC. Schema: `meta`, `confluence`, `macro_regime`, `price_model`, `vol_
    - `top_wall.score` deciles (verifies STRONG_WALL threshold)
    - `(gammaRegime, volRegime)` 9-cell grid (verifies regime weights)
    - `H_GEX_norm` deciles (verifies dispersion penalty)
-   - `wall_reaction` tag (verifies walls.pdf table)
+   - `wall_reaction` tag (verifies reaction table)
 4. Re-fit thresholds and (eventually) `REGIME_WEIGHTS` against the labeled set
 
 ---
@@ -339,7 +338,7 @@ at 10 PM UTC. Schema: `meta`, `confluence`, `macro_regime`, `price_model`, `vol_
   options-flow + entropy/PCA; Layer 3 is per-strike scoring. Each has its own update cadence,
   its own JSON output, and its own dashboard tab.
 - **Python intraday script is NOT canonical** — `intraday.js` is the production path. Python is
-  for hindcasting only and intentionally lags the JS (no walls.pdf tags, no vol-scaled band).
+  for hindcasting only and intentionally lags the JS (no reaction tags, no vol-scaled band).
 - **COT data lag** — CFTC releases Tuesday data on Friday. The COT staleness check refreshes
   automatically if >9 days old. `nq_lev_pctile` comes from `cot_NQ.csv` (historical), not the
   live feed.

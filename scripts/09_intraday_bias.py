@@ -18,17 +18,17 @@ What this Python version has:
 
 What this Python version DOES NOT have (only in intraday.js):
   - Vol-scaled NEAR_FLIP band (max(30, 0.5 × price × IV/100 / sqrt(252)))
-  - bias.pdf primary-bias table lookup
-  - walls.pdf per-strike reaction tags
+  - Primary-bias table lookup (private methodology)
+  - Per-strike reaction tags (private methodology)
   - Dim/Eraker/Vilkov gamma asymmetry scaling
   - PC1 momentum-validity guard
 
 These were intentionally not ported because the Python script is used for
 hindcasting historical snapshots where (a) IV history isn't available and
-(b) adding them would couple the backtest to walls.pdf interpretation rules
-that need to be tested in isolation first. Once logs/ has enough labeled
-data, walk-forward validation can compare the Python baseline to a
-version that adds each PDF-derived signal one at a time.
+(b) adding them would couple the backtest to private-methodology interpretation
+rules that need to be tested in isolation first. Once logs/ has enough labeled
+data, walk-forward validation can compare the Python baseline to a version
+that adds each methodology-derived signal one at a time.
 
 Inputs (all strictly past data — no lookahead):
   data/processed/NQ_daily_clean.csv

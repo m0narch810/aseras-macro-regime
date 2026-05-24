@@ -16,5 +16,5 @@ data/processed/*_15m_clean.csv
 netlify/functions/lib/methodology_config.js
 scripts/methodology_config.py
 
-# Source PDFs — private dxrk methodology and research materials
+# Private methodology and research source PDFs
 clauderesources/

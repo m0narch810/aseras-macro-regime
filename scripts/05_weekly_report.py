@@ -385,7 +385,7 @@ def print_week(date, row, lv, save_list=None):
     else:
         lev_label = "NEUTRAL"
 
-    # COT extreme flag (dxrk: >80 = trend on fumes, <20 = extreme short)
+    # COT extreme: >80th pctile = crowded long, <20th = crowded short
     cot_extreme       = bool(nq_pctile > 0.80 or nq_pctile < 0.20)
     cot_extreme_label = (
         "FUMES_LONG"    if nq_pctile > 0.80 else

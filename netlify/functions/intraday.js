@@ -33,9 +33,30 @@ const PCA_MIN_SAMPLES = 30;
 const MACRO_BULL = new Set(['STRONG BULL', 'LEAN BULL']);
 const MACRO_BEAR = new Set(['STRONG BEAR', 'LEAN BEAR']);
 
-// Weekly macro bias — bundled at build time via esbuild require() inlining.
-let macroBiasData = null;
-try { macroBiasData = require('../../bias_output.json'); } catch (e) { macroBiasData = null; }
+// Weekly macro bias — fetched live from GitHub at runtime with 10-min cache.
+// Falls back to the bundled copy if fetch fails. Keeps RTH bias factors fresh
+// without needing a Netlify rebuild after each weekly action commit.
+const BIAS_URL =
+  'https://raw.githubusercontent.com/m0narch810/vanta/master/bias_output.json';
+const BIAS_TTL_MS = 10 * 60 * 1000;
+let _biasCache = null;
+let _biasCacheAt = 0;
+let _biasBundled = null;
+try { _biasBundled = require('../../bias_output.json'); } catch (_) {}
+
+async function getMacroBiasData() {
+  const now = Date.now();
+  if (_biasCache && now - _biasCacheAt < BIAS_TTL_MS) return _biasCache;
+  try {
+    const res = await fetch(BIAS_URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    _biasCache = await res.json();
+    _biasCacheAt = now;
+    return _biasCache;
+  } catch (_) {
+    return _biasCache || _biasBundled;
+  }
+}
 
 // ── METHODOLOGY CONFIG LOADER ─────────────────────────────────────────────────
 // Loads from METHODOLOGY_CONFIG env var (Netlify production), then falls back to
@@ -508,8 +529,6 @@ function classifyIntradayBias({ gammaRegime, volRegime, gammaFlip, nqPrice, topW
 }
 
 // ── RTH BIAS INPUTS ───────────────────────────────────────────────────────────
-// 2Y yield direction via SHY ETF (iShares 1-3Y Treasury Bond ETF).
-// Falling SHY = rising 2Y yields = bearish NQ lean.
 function classify2YSignal(bars) {
   if (!bars || bars.length < 6) return 'UNAVAILABLE';
   const closes = bars.map(b => b.close);
@@ -523,8 +542,6 @@ function classify2YSignal(bars) {
   return 'STABLE';
 }
 
-// BOJ/carry signal via USD/JPY daily closes.
-// Fast yen strengthening (USDJPY falling) = forced JPY repatriation = global risk-off.
 function classifyBOJSignal(bars) {
   if (!bars || bars.length < 4) return 'UNAVAILABLE';
   const closes = bars.map(b => b.close);
@@ -537,7 +554,6 @@ function classifyBOJSignal(bars) {
   return 'YEN_STABLE';
 }
 
-// Net system liquidity trend from the latest bias_output.json macro regime scores.
 function getLiquidityTrend(data) {
   const score = data &&
     data.macro_regime &&
@@ -549,7 +565,6 @@ function getLiquidityTrend(data) {
   return 'STABLE';
 }
 
-// COT crowding label from latest bias_output.json.
 function getCotLabel(data) {
   const p = data && data.cot && data.cot.nq_lev_pctile;
   if (p == null) return 'UNAVAILABLE';
@@ -558,8 +573,6 @@ function getCotLabel(data) {
   return 'NEUTRAL';
 }
 
-// RTH macro bias verdict from 4 factors (yield, liquidity, COT, BOJ) plus
-// the weekly macro confluence as a tiebreaker.
 function classifyRTHBias({ yieldSignal, liquidityTrend, cotLabel, bojSignal, macroConfluence }) {
   let bull = 0, bear = 0;
 
@@ -598,9 +611,7 @@ function classifyRTHBias({ yieldSignal, liquidityTrend, cotLabel, bojSignal, mac
   };
 }
 
-// ── OPEN ARCHETYPE SCORING ────────────────────────────────────────────────────
-// Scores all four open archetypes using GEX structure. Committed code uses
-// abstract type codes; display names/descriptions come from getConfig().
+// ── OPEN TYPE SCORING ─────────────────────────────────────────────────────────
 function classifyOpenArchetype({ gammaFlip, futuresPrice, aggregateGreeks, levels, ivBand }) {
   if (!gammaFlip || !futuresPrice || !aggregateGreeks) {
     return { type: null, confidence: 0, dir: 'neutral', runner_up: null, runner_up_confidence: 0, signals: [] };
@@ -677,12 +688,13 @@ exports.handler = async (event) => {
     const cookie = process.env.FF_SESSION || '';
     const exp    = todayET();
 
-    const [data, volData, yahoo, shyBars, usdjpyBars] = await Promise.all([
+    const [data, volData, yahoo, shyBars, usdjpyBars, macroBiasData] = await Promise.all([
       fetchJson(`${BASE_URL}/futures-levels?symbol=${SYMBOL}&exp=${exp}`, cookie),
       fetchJson(`${BASE_URL}/vol/realized?symbol=${SYMBOL}`, cookie).catch(() => null),
       fetchYahooDaily().catch(() => null),
       fetchYahooSymbol('SHY', 6).catch(() => null),
       fetchYahooSymbol('USDJPY=X', 4).catch(() => null),
+      getMacroBiasData(),
     ]);
 
     if (!data.rows || !data.rows.length) throw new Error('No rows — FF_SESSION may be expired.');

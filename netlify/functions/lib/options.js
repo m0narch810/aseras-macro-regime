@@ -196,8 +196,8 @@ function normalizeAbs(values) {
 // Returns strikes within FILTER_PCT of futures price, with `strike_futures`
 // and `dist_nq` attached. Used by both scoreLevels (which then filters by
 // MIN_SCORE) and by callers that need the broader nearby set for aggregate
-// statistics (e.g. bias.pdf table lookup which should see all proximate
-// strikes, not just the scoring-worthy ones).
+// statistics (e.g. the aggregate-bias table lookup which should see all
+// proximate strikes, not just the scoring-worthy ones).
 function nearbyStrikes(strikes, futuresPrice) {
   if (!futuresPrice) return [];
   return Object.entries(strikes)
@@ -223,7 +223,7 @@ function scoreLevels(strikes, weights, futuresPrice) {
                        oiN[i]*weights.oi   + dagN[i]*weights.dag) * 100;
       const volSens = Math.abs(r.net_vex) / (Math.abs(r.net_gex) + 1e-9);
       const base    = r.net_gex > 0 ? 'CALL WALL' : 'PUT WALL';
-      // walls.pdf reaction tag computed from this strike's Greek signs.
+      // Reaction tag from this strike's Greek signs (private table).
       const wall_reaction = classifyWallReaction(r);
       return {
         strike_futures: Math.round(r.strike_futures * 10)  / 10,
@@ -258,18 +258,14 @@ function getWeights(volRegime, gammaRegime) {
   return vr[gammaRegime] || vr.NEAR_FLIP;
 }
 
-// ── PDF-DERIVED METHODOLOGY (clauderesources/) ───────────────────────────────
-// The functions below encode reaction/bias tables from:
-//   - walls.pdf       : per-strike wall reaction by (wall_type, DEX, Charm, Vanna)
-//   - bias.pdf        : aggregate bias by (GEX, Charm, Vanna, IV regime, flip side)
-//   - OPTIONSFLOW.pdf : context (Greek definitions, dealer mechanics)
-//   - Elms 2026 (1.pdf) and Dim/Eraker/Vilkov 2025 (2.pdf): empirical asymmetries
-// They classify *expected behavior* at strikes and in aggregate — to complement
-// the magnitude-only `score` field with directional context.
+// ── PRIVATE METHODOLOGY TABLES ────────────────────────────────────────────────
+// Encodes reaction and bias tables from owner-only methodology sources plus
+// published empirical asymmetries (Elms 2026, Dim/Eraker/Vilkov 2025). Outputs
+// expected directional behavior at strikes and in aggregate — complementing the
+// magnitude-only `score` field.
 
-// Classify a single wall's expected reaction using the walls.pdf interaction
-// table. CALL_WALL vs PUT_WALL determined by net_gex sign. Returns a tag.
-// Source: walls.pdf (Options Flow Wall Logic Tables).
+// Classify a single wall's expected reaction. CALL_WALL vs PUT_WALL determined
+// by net_gex sign. Returns a tag.
 function classifyWallReaction(level) {
   if (!level) return null;
   const isCallWall    = (level.net_gex || 0) > 0;
@@ -308,7 +304,7 @@ const WALL_REACTION_DIR = {
   PUT_WALL_MIXED:              { dir: 'NEUTRAL', strength: 0 },
 };
 
-// Aggregate Greek signs across nearby strikes (used for the bias.pdf table).
+// Aggregate Greek signs across nearby strikes (feeds the bias table below).
 // Returns { gex_sign, charm_sign, vanna_sign, dex_sign, totals... } or null.
 function computeAggregateGreeks(levels) {
   if (!levels || !levels.length) return null;
@@ -332,10 +328,9 @@ function computeAggregateGreeks(levels) {
   };
 }
 
-// Look up the bias.pdf condition table. Picks the first matching rule.
+// Look up the aggregate-bias condition table. Picks the first matching rule.
 // Trend conditions (negative gamma + concordant charm/vanna) win over chop
 // conditions, which win over IV-regime conditions, which win over price-vs-flip.
-// Source: bias.pdf (Options Flow Bias & Wall Logic Tables — Bias section).
 function applyBiasTable(aggregates, volRegime, priceVsFlip) {
   if (!aggregates) return 'UNKNOWN';
   const { gex_sign, charm_sign, vanna_sign } = aggregates;
@@ -352,7 +347,7 @@ function applyBiasTable(aggregates, volRegime, priceVsFlip) {
   return 'NEUTRAL';
 }
 
-// Tag-to-direction for the bias.pdf primary bias.
+// Tag-to-direction map for the aggregate-bias output.
 const BIAS_TAG_DIR = {
   STRONG_BEARISH_TREND: { dir: 'BEAR', strength: 2 },
   STRONG_BULLISH_TREND: { dir: 'BULL', strength: 2 },
