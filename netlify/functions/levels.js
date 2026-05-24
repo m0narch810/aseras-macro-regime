@@ -9,11 +9,12 @@ const BASE_URL = 'https://www.free-flow.site/api';
 
 const OUT_HEADERS = { ...BASE_HEADERS, 'Cache-Control': 'public, max-age=240' };
 
-// ── GAMMA FLIP ────────────────────────────────────────────────────────────────
-// Per-strike GEX sign change: call walls (positive) → put walls (negative).
-// Interpolates the exact zero crossing between adjacent strikes and returns
-// the crossing nearest to the current futures price.
-// (Implementation lives in lib/options.js as computeGammaFlip)
+function addDays(dateStr, n) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  date.setUTCDate(date.getUTCDate() + n);
+  return date.toISOString().slice(0, 10);
+}
 
 // ── HANDLER ───────────────────────────────────────────────────────────────────
 exports.handler = async (event) => {
@@ -23,12 +24,32 @@ exports.handler = async (event) => {
     return { statusCode: 401, headers: OUT_HEADERS, body: JSON.stringify({ error: true, message: 'unauthorized' }) };
 
   try {
-    const cookie = process.env.FF_SESSION || '';
-    const exp    = todayET();
+    const cookie   = process.env.FF_SESSION || '';
+    const params   = event.queryStringParameters || {};
+    const today    = todayET();
 
-    const data = await fetchJson(`${BASE_URL}/futures-levels?symbol=${SYMBOL}&exp=${exp}`, cookie);
-    if (!data.rows || !data.rows.length)
-      throw new Error('No rows returned from FreeFlow — FF_SESSION may be expired.');
+    // If caller passes ?dte=N use that specific offset; otherwise auto-fallback 0→1→2.
+    let data, activeExp, activeDTE;
+    const requestedDte = params.dte != null ? parseInt(params.dte, 10) : null;
+
+    if (requestedDte != null && requestedDte >= 0 && requestedDte <= 2) {
+      activeExp = requestedDte === 0 ? today : addDays(today, requestedDte);
+      activeDTE = requestedDte;
+      data = await fetchJson(`${BASE_URL}/futures-levels?symbol=${SYMBOL}&exp=${activeExp}`, cookie);
+      if (!data.rows || !data.rows.length)
+        throw new Error(`No data for ${activeDTE}DTE (${activeExp}) — markets may be closed.`);
+    } else {
+      // Auto: try 0DTE → 1DTE → 2DTE
+      let found = false;
+      for (let dte = 0; dte <= 2; dte++) {
+        const exp = dte === 0 ? today : addDays(today, dte);
+        try {
+          const d = await fetchJson(`${BASE_URL}/futures-levels?symbol=${SYMBOL}&exp=${exp}`, cookie);
+          if (d.rows && d.rows.length) { data = d; activeExp = exp; activeDTE = dte; found = true; break; }
+        } catch (_) {}
+      }
+      if (!found) throw new Error('No options data for 0DTE, 1DTE, or 2DTE — FF_SESSION may be expired.');
+    }
 
     let iv = null, rvIvRatio = null, hv21 = null;
     try {
@@ -71,6 +92,8 @@ exports.handler = async (event) => {
       headers:    OUT_HEADERS,
       body: JSON.stringify({
         updated:     updatedET,
+        expiry_date: activeExp,
+        expiry_dte:  activeDTE,
         nq_price:    Math.round(futuresPrice * 10)  / 10,
         qqq_price:   Math.round(spotEtf      * 100) / 100,
         ratio:       Math.round(ratio        * 100) / 100,

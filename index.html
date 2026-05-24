@@ -1516,6 +1516,34 @@ function renderLevels(d) {
 
   app.appendChild(hdr);
 
+  // ── DTE PICKER ──
+  const dtePicker = el("div", {style:{
+    display:"flex", alignItems:"center", gap:"6px",
+    margin:"10px 0 4px", flexWrap:"wrap"
+  }});
+  dtePicker.appendChild(el("span", {style:{fontSize:"9px",color:"var(--ghost)",letterSpacing:"0.12em",textTransform:"uppercase",marginRight:"4px"}}, "Expiry"));
+  [["Auto", null], ["0DTE", 0], ["1DTE", 1], ["2DTE", 2]].forEach(function(pair) {
+    const label = pair[0], dteVal = pair[1];
+    const isActive = selectedLevelsDTE === dteVal;
+    const btn = el("button", {
+      style:{
+        padding:"3px 10px", fontSize:"10px", fontWeight:"600",
+        borderRadius:"4px", border:"1px solid",
+        cursor:"pointer", transition:"all 0.15s",
+        borderColor: isActive ? "var(--bull)" : "rgba(255,255,255,0.15)",
+        background:  isActive ? "rgba(52,211,153,0.12)" : "transparent",
+        color:       isActive ? "var(--bull)" : "var(--muted)",
+      }
+    }, label);
+    btn.addEventListener("click", function() { loadLevels(dteVal); });
+    dtePicker.appendChild(btn);
+  });
+  if (d.expiry_date) {
+    const dteLabel = d.expiry_dte > 0 ? "  (" + d.expiry_dte + "DTE  ·  " + d.expiry_date + ")" : "  ·  " + d.expiry_date;
+    dtePicker.appendChild(el("span", {style:{fontSize:"9px",color:"var(--ghost)",marginLeft:"6px"}}, dteLabel));
+  }
+  app.appendChild(dtePicker);
+
   const refreshBar = el("div", {className:"lvl-refresh-status"});
   refreshBar.appendChild(el("div", {id:"levels-last-updated", className:"refresh-label"}, "Loading…"));
   refreshBar.appendChild(el("div", {id:"levels-refresh-countdown", className:"refresh-countdown"}, ""));
@@ -1581,6 +1609,7 @@ let levelsLoaded         = false;
 let levelsRefreshTimeout = null;
 let levelsCountdownTimer = null;
 let lastLevelsUpdate     = null;
+let selectedLevelsDTE    = null; // null = auto
 
 function formatTimeET(date) {
   return date.toLocaleString('en-US', {
@@ -1667,9 +1696,10 @@ function startCountdownTimer() {
   updateLevelsStatus();
 }
 
-function loadLevels() {
-  // Uses custom background function and injects authorization header token
-  fetch("/.netlify/functions/levels?_" + Date.now(), {
+function loadLevels(dte) {
+  if (dte !== undefined) selectedLevelsDTE = dte;
+  const dteParam = selectedLevelsDTE != null ? "&dte=" + selectedLevelsDTE : "";
+  fetch("/.netlify/functions/levels?_=" + Date.now() + dteParam, {
     method: "GET",
     headers: {
       "Authorization": "Bearer " + localStorage.getItem("vanta_session")
@@ -1833,25 +1863,30 @@ function renderIntraday(d) {
   }
   if (levRow.childNodes.length) archHero.appendChild(levRow);
 
-  // Runner-up
+  // Runner-up — show descriptive names instead of TYPE codes
   if (d.open_archetype_runner_up) {
+    const ARCH_NAMES = {
+      TYPE_A: 'Flip Support', TYPE_B: 'Wall Cap',
+      TYPE_C: 'Bull Extension', TYPE_D: 'Bear Extension',
+    };
     const ruRow = el("div", {className:"arch-runner-up"});
     ruRow.appendChild(el("span", {className:"arch-ru-label"}, "Other signals:"));
     const allScores = d.open_archetype_all_scores || {};
     Object.keys(allScores).forEach(function(t) {
       if (t === arch || !allScores[t]) return;
-      const label = t + "  " + allScores[t] + "/5";
+      const label = (ARCH_NAMES[t] || t) + "  " + allScores[t] + "/5";
       ruRow.appendChild(el("span", {className:"arch-ru-item"}, label));
     });
     archHero.appendChild(ruRow);
   }
 
-  // Updated timestamp right-aligned inside hero
+  // Updated timestamp — appended inside hero (was missing the appendChild call)
   const updRow = el("div", {style:{marginTop:"14px",paddingTop:"10px",
     borderTop:"1px solid rgba(255,255,255,0.06)",
     display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"10px"}});
   updRow.appendChild(el("div", {style:{fontSize:"9px",color:"var(--ghost)"}},
     "Updated " + (d.updated || "—") + "  ·  " + (d.pred_date || "") + (d.expiry_dte > 0 ? "  (" + d.expiry_dte + "DTE)" : "")));
+  archHero.appendChild(updRow);
   app.appendChild(archHero);
 
   // ── RTH MACRO BIAS ──────────────────────────────
