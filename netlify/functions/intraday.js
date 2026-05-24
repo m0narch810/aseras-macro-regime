@@ -87,10 +87,10 @@ function _emptyConfig() {
   const empty = (cls) => ({ label: '', cls, interp: '' });
   return {
     archetypes: {
-      TYPE_A: { name: 'Flip Support',      short: 'A · Bull',  desc: 'Price near gamma flip with positive delta flow and put wall support below.', action: '', signal_keys: [] },
-      TYPE_B: { name: 'Wall Cap',          short: 'B · Bear',  desc: 'Price above flip but capped by an overhead call wall with negative delta.', action: '', signal_keys: [] },
-      TYPE_C: { name: 'Bull Extension',    short: 'C · Bull',  desc: 'Price well above flip with call buying and room to extend higher.', action: '', signal_keys: [] },
-      TYPE_D: { name: 'Bear Extension',    short: 'D · Bear',  desc: 'Price well below flip with put buying and room to extend lower.', action: '', signal_keys: [] },
+      TYPE_A: { name: 'Down Sweep',     short: 'A · Bull',  desc: 'Manipulate price down near the gamma flip, then pump up. Delta and charm positive; put wall absorbs the sweep.', action: '', signal_keys: [] },
+      TYPE_B: { name: 'Up Sweep',       short: 'B · Bear',  desc: 'Manipulate price up into call wall resistance, then dump. Delta and charm negative; overhead wall caps the sweep.', action: '', signal_keys: [] },
+      TYPE_C: { name: 'Straight Bull',  short: 'C · Bull',  desc: 'Direct pump up from the open — price well above flip with call buying and room to run.', action: '', signal_keys: [] },
+      TYPE_D: { name: 'Straight Bear',  short: 'D · Bear',  desc: 'Direct dump down from the open — price well below flip with put buying and room to fall.', action: '', signal_keys: [] },
     },
     rthBias: {
       BULLISH: { label: 'RTH BULLISH', cls: 'bull',  summary: '' },

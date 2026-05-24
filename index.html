@@ -1866,8 +1866,8 @@ function renderIntraday(d) {
   // Runner-up — show descriptive names instead of TYPE codes
   if (d.open_archetype_runner_up) {
     const ARCH_NAMES = {
-      TYPE_A: 'Flip Support', TYPE_B: 'Wall Cap',
-      TYPE_C: 'Bull Extension', TYPE_D: 'Bear Extension',
+      TYPE_A: 'Down Sweep', TYPE_B: 'Up Sweep',
+      TYPE_C: 'Straight Bull', TYPE_D: 'Straight Bear',
     };
     const ruRow = el("div", {className:"arch-runner-up"});
     ruRow.appendChild(el("span", {className:"arch-ru-label"}, "Other signals:"));
