@@ -15,11 +15,12 @@ data, math, and surface in the dashboard.
 │  Updated: Friday 5 PM EDT via .github/workflows/weekly-macro-update.yml │
 │  Surface: dashboard #bias tab, /.netlify/functions/bias                 │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  LAYER 2 — INTRADAY BIAS (live, every ~5 min)                           │
+│  LAYER 2 — RTH BIAS (live, every ~5 min)                                │
 │  netlify/functions/intraday.js (canonical, server-side)                 │
 │  scripts/09_intraday_bias.py (Python backtest baseline, NOT production) │
-│  Options flow + entropy gate + PCA + macro confluence + walls.pdf tags  │
-│  Surface: dashboard #intraday tab, /.netlify/functions/intraday         │
+│  RTH macro 4-factor bias + open archetype scoring (4 types)            │
+│  Options flow + entropy gate + PCA as secondary context                 │
+│  Surface: dashboard #intraday tab ("RTH Bias"), /.netlify/functions/intraday │
 ├─────────────────────────────────────────────────────────────────────────┤
 │  LAYER 3 — LEVELS SCORING (live, every ~5 min)                          │
 │  netlify/functions/levels.js (handler) + lib/options.js (math)          │
@@ -145,46 +146,43 @@ processed CSVs only feed the training pipeline (scripts 03 and 04).
 
 ---
 
-## Layer 2 — Intraday Bias (netlify/functions/intraday.js)
+## Layer 2 — RTH Bias (netlify/functions/intraday.js)
 
-**Canonical implementation is the JS function.** The Python `09_intraday_bias.py` is a simplified
-backtest baseline used by `10_validate_intraday.py` for walk-forward validation. The dashboard
-never calls Python.
+**Canonical implementation is the JS function.** Dashboard tab is labelled "RTH Bias".
+The Python `09_intraday_bias.py` is a simplified backtest baseline; it does NOT implement
+the RTH archetype scoring.
 
 **Inputs per request:**
 1. FreeFlow API: per-strike GEX/VEX/CharmEX/DEX/DAG/OI for 3 nearest expiries
 2. FreeFlow vol endpoint: current_iv, rv_iv_ratio, hv21
-3. Yahoo Finance: 2 years of daily OHLC for NQ=F (fallback QQQ) — feeds entropy and PCA
-4. `bias_output.json` (bundled via `require()` at build time): macro confluence
+3. Yahoo Finance: 2 years of daily NQ=F (fallback QQQ) — feeds entropy and PCA
+4. Yahoo Finance: SHY (1-3Y Treasury ETF, 1 month) — 2Y yield direction proxy
+5. Yahoo Finance: USDJPY=X (1 month) — BOJ/carry unwind signal
+6. `bias_output.json` (bundled via `require()` at build time): macro confluence + COT + liquidity
 
-**Computed inside the handler, in order:**
-1. `aggregateDataset(data)` → per-strike Greeks
-2. `computeGammaFlip(strikes, futuresPrice)` → linear-interpolated GEX zero crossing
-3. **Vol-scaled gamma regime band**: `_ivBand = max(30, 0.5 × futuresPrice × IV/100 / sqrt(252))`.
-   `POSITIVE` if `(price - flip) > _ivBand`; `NEGATIVE` if `< -_ivBand`; else `NEAR_FLIP`.
-   This is the 1σ half-day move scaled by half — adaptive across vol regimes.
-4. `classifyVolRegime(iv, rvIvRatio)` → EXPANSION / NEUTRAL / CONTRACTION
-5. `getWeights(volRegime, gammaRegime)` → 2D regime weight lookup (3×3 grid in lib/options.js)
-6. `scoreLevels(strikes, weights, futuresPrice)` → filtered + scored levels with `wall_reaction` tag
-7. `computeHGEXNorm(levels)` → normalized Shannon entropy of |GEX| distribution
-8. `computeTopWall(levels, futuresPrice)` → proximity-weighted top wall (e-fold = 200pts)
-9. `nearbyStrikes(strikes, futuresPrice)` → FILTER_PCT-only set (broader than scored levels)
-10. `computeAggregateGreeks(nearby)` + `applyBiasTable(aggregates, volRegime, priceVsFlip)` → bias.pdf tag
-11. `computeReturnEntropy(yahoo.bars.map(b => b.close))` → STABLE / CRITICAL / UNKNOWN
-12. `computePCA(yahoo.bars)` → PC1/PC2/PC3 + `pc1_momentum_valid` guard
-13. `classifyIntradayBias({…})` → bias + confidence + reason, with continuous evidence accumulator
+**Computed inside the handler, in order (primary path):**
+1–12. (same GEX/entropy/PCA pipeline as before — unchanged)
+13. `classify2YSignal(shyBars)` → RISING_FAST / RISING / STABLE / FALLING / UNAVAILABLE
+14. `classifyBOJSignal(usdjpyBars)` → CARRY_UNWIND / YEN_STABLE / YEN_WEAKENING / UNAVAILABLE
+15. `getLiquidityTrend(macroBiasData)` → IMPROVING / STABLE / DETERIORATING (from net_liq_wow score)
+16. `getCotLabel(macroBiasData)` → FUMES_LONG / NEUTRAL / EXTREME_SHORT (from nq_lev_pctile)
+17. `classifyRTHBias({…})` → BULLISH / BEARISH / NEUTRAL / UNKNOWN with bull/bear counts
+18. `classifyOpenArchetype({…})` → TYPE_A / TYPE_B / TYPE_C / TYPE_D + confidence 0-5 + signals[]
+19. `getConfig()` → loads archetype names/descriptions from gitignored methodology_config or env var
 
-**Confidence is a continuous evidence score, bucketed once at the end** (no ordinal clamping
-chain — Phase 4 fix). Each modifier adds/subtracts:
-- bias.pdf primary tag confirms (+strength) or conflicts (−strength) with the directional call
-- walls.pdf wall_reaction confirms or conflicts (strength-2 conflicts trigger WALL_BREAKDOWN air-pocket flag)
-- GEX dispersion (H_GEX_norm > 0.6) → −1
-- Macro neutral → −1
-- In NEGATIVE gamma regime: all evidence scaled by `GAMMA_ASYMMETRY_RATIO = 0.344` (Dim et al. 2025)
+**Open Archetype scoring** (`classifyOpenArchetype`):
+- Scores all 4 types based on GEX structure signals (ivBand, flipDiff, dex_sign, vex_sign, charm_sign, wall proximity)
+- Each condition adds 1 point; max score 5; winner displayed in the big action panel
+- TYPE_A and TYPE_C are bull-resolving (`dir: 'bull'`); TYPE_B and TYPE_D are bear-resolving
+- Actual archetype names/descriptions are in the gitignored `methodology_config.js`
 
-Final mapping: `evidence ≥ 1 → HIGH`, `≤ -1 → LOW`, else `MODERATE`.
+**RTH Bias verdict** (`classifyRTHBias`):
+- Weighted signals: 2Y yield (1-2 pts), liquidity (1), COT (1), BOJ (2 for CARRY_UNWIND), weekly macro (1)
+- BEARISH when bear score ≥ 2.5; BULLISH when bull score ≥ 2.5; else NEUTRAL
 
-**Hard gate**: CRITICAL entropy → `NO_BIAS, AVOID`. Bypasses everything else.
+**Options-flow bias** (`classifyIntradayBias`) is still computed but shown as secondary context ("Options Flow Bias" section) below the main RTH panel. CRITICAL entropy gate still bypasses this classifier.
+
+**Hard gate**: CRITICAL entropy → `NO_BIAS, AVOID` on the options classifier only; RTH Bias still shows.
 
 ---
 
@@ -225,6 +223,10 @@ Source PDFs that inform Layer 2 and Layer 3:
 | `1.pdf` (Elms 2026) | Empirical: modern SPX shows AMPLIFICATION not pinning. High OI ↔ wider ranges (p=0.0003) |
 | `2.pdf` (Dim/Eraker/Vilkov 2025) | Empirical: MM 0DTE net gamma positive on avg; positive-gamma attenuation ~3× stronger than negative-gamma amplification |
 | `3.pdf` (Garmash 2024) | Confirms gamma-regime → mean-reversion vs momentum mapping |
+| `daily macro bias by dxrk.pdf` | RTH macro 5-factor framework: 2Y yield, TGA/RRP, COT crowding, BOJ signal, surprise mechanism |
+| `weekly macro bias by dxrk.pdf` | Weekly HTF methodology: fed stance, COT extremes, net liquidity, yield curve, cross-asset divergence |
+| `how to predict market open by dxrk.pdf` | 4 open archetypes (TYPE_A/B/C/D), manipulation tells, DEX-vs-open-move framework |
+| `market_definitive_research.pdf` | Chapter 10: NY AM Daily Prediction Protocol (-9 to +9 scoring); 5-phase framework |
 
 **Helpers in `lib/options.js`:**
 - `classifyWallReaction(level)` — walls.pdf table → wall_reaction tag
@@ -234,11 +236,27 @@ Source PDFs that inform Layer 2 and Layer 3:
 - `GAMMA_ASYMMETRY_RATIO = 0.344` — from Dim et al. Table 3 (-0.022 / -0.064 = 0.344)
 - `PINNING_REGIME_ACTIVE = false` — from Elms 2026; exported but not yet consumed by logic
 
+**New helpers in `netlify/functions/intraday.js` (RTH Bias layer):**
+- `classify2YSignal(bars)` — 5-day ROC of SHY ETF → RISING_FAST / RISING / STABLE / FALLING / UNAVAILABLE
+- `classifyBOJSignal(bars)` — 3-day ROC of USDJPY=X → CARRY_UNWIND / YEN_STABLE / YEN_WEAKENING / UNAVAILABLE
+- `getLiquidityTrend(macroBiasData)` — reads `net_liq_wow` factor score from bias_output.json
+- `getCotLabel(macroBiasData)` — reads `nq_lev_pctile` from bias_output.json → FUMES_LONG / NEUTRAL / EXTREME_SHORT
+- `classifyRTHBias({yieldSignal, liquidityTrend, cotLabel, bojSignal, macroConfluence})` — 5-factor RTH verdict
+- `classifyOpenArchetype({gammaFlip, futuresPrice, aggregateGreeks, levels, ivBand})` — scores 4 open types (TYPE_A/B/C/D), returns winner + confidence 0-5
+- `getConfig()` — lazy-loads methodology_config.js (gitignored) or METHODOLOGY_CONFIG env var or empty fallback
+
+**Methodology config privacy model:**
+- `netlify/functions/lib/methodology_config.js` — **gitignored**; contains archetype names, descriptions, action text, RTH factor labels (dxrk framework specifics)
+- `netlify/functions/lib/methodology_config.example.js` — **committed** skeleton with empty strings; shows structure only
+- Production Netlify: set `METHODOLOGY_CONFIG` env var to base64-encoded JSON of the real config
+- Committed intraday.js code uses abstract `TYPE_A/B/C/D` labels; display text injected at runtime
+- `scripts/methodology_config.py` — **gitignored**; Python counterpart (weekly report narrative labels, not yet implemented)
+
 ---
 
 ## Frontend (index.html + auth.js)
 
-Single-file static dashboard served by Netlify. Three tabs (`#bias`, `#intraday`, `#levels`)
+Single-file static dashboard served by Netlify. Three tabs (`#bias`, `#intraday`="RTH Bias", `#levels`)
 routed via URL hash. All DOM construction uses an `el(tag, attrs, ...children)` helper — no
 framework, no template strings.
 

@@ -484,6 +484,193 @@ footer .alph { color: rgba(255,255,255,0.55); }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16); border-radius: 1px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.28); }
 
+/* ── RTH BIAS / ARCHETYPE PANEL ─────────────────── */
+.arch-hero {
+  padding: 28px 32px; margin-bottom: 10px;
+  border: 1px solid var(--border); border-radius: 2px;
+  background: var(--surface);
+  opacity: 0;
+  animation: fadeUp 0.6s cubic-bezier(0.16,1,0.3,1) forwards;
+  position: relative; overflow: hidden;
+}
+.arch-hero::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+}
+.arch-hero.bull::before  { background: var(--bull);  box-shadow: 4px 0 20px var(--bull-glow); }
+.arch-hero.bear::before  { background: var(--bear);  box-shadow: 4px 0 20px var(--bear-glow); }
+.arch-hero.mixed::before { background: var(--mixed); box-shadow: 4px 0 20px var(--mixed-glow); }
+.arch-hero.ghost::before { background: rgba(255,255,255,0.2); }
+.arch-hero.bull  { border-color: rgba(52,211,153,0.24); }
+.arch-hero.bear  { border-color: rgba(248,113,113,0.24); }
+.arch-hero.mixed { border-color: rgba(251,191,36,0.2); }
+
+.arch-eyebrow {
+  font-family: 'Syne', sans-serif;
+  font-size: 8px; font-weight: 700;
+  letter-spacing: 0.30em; text-transform: uppercase;
+  color: var(--ghost); margin-bottom: 8px;
+}
+.arch-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 28px; font-weight: 800;
+  letter-spacing: 0.03em; line-height: 1.1; margin-bottom: 6px;
+}
+.arch-name.bull  { color: var(--bull);  text-shadow: 0 0 40px rgba(52,211,153,0.4); }
+.arch-name.bear  { color: var(--bear);  text-shadow: 0 0 40px rgba(248,113,113,0.4); }
+.arch-name.mixed { color: var(--mixed); text-shadow: 0 0 40px rgba(251,191,36,0.4); }
+.arch-name.ghost { color: var(--ghost); }
+
+.arch-short {
+  display: inline-block; border-radius: 2px;
+  padding: 2px 9px; margin-bottom: 14px;
+  font-family: 'Syne', sans-serif;
+  font-size: 8px; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  border: 1px solid transparent;
+}
+.arch-short.bull  { background: var(--bull-dim);  border-color: var(--bull-b);  color: var(--bull); }
+.arch-short.bear  { background: var(--bear-dim);  border-color: var(--bear-b);  color: var(--bear); }
+.arch-short.mixed { background: var(--mixed-dim); border-color: var(--mixed-b); color: var(--mixed); }
+.arch-short.ghost { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); color: var(--ghost); }
+
+.arch-desc {
+  font-size: 11.5px; color: var(--muted); line-height: 1.6;
+  margin-bottom: 14px;
+}
+.arch-action {
+  padding: 10px 14px; margin-bottom: 14px;
+  border-left: 3px solid var(--accent-sub);
+  background: rgba(255,255,255,0.025);
+  font-size: 11px; font-weight: 500;
+  color: var(--text); line-height: 1.5;
+}
+.arch-action.bull { border-left-color: var(--bull); }
+.arch-action.bear { border-left-color: var(--bear); }
+.arch-action.mixed{ border-left-color: var(--mixed); }
+
+.arch-signals {
+  display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 16px;
+}
+.arch-chip {
+  display: inline-block; border-radius: 2px;
+  padding: 2px 8px;
+  font-family: 'Syne', sans-serif;
+  font-size: 7.5px; font-weight: 700;
+  letter-spacing: 0.07em;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.05);
+  color: var(--muted); white-space: nowrap;
+}
+
+.arch-conf-row {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 14px;
+}
+.arch-conf-label {
+  font-family: 'Syne', sans-serif;
+  font-size: 7.5px; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--ghost); white-space: nowrap;
+}
+.arch-conf-bar {
+  flex: 1; height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px;
+}
+.arch-conf-fill {
+  height: 4px; border-radius: 2px; transition: width 0.4s ease;
+}
+.arch-conf-fill.bull  { background: var(--bull);  box-shadow: 0 0 6px var(--bull-glow); }
+.arch-conf-fill.bear  { background: var(--bear);  box-shadow: 0 0 6px var(--bear-glow); }
+.arch-conf-fill.mixed { background: var(--mixed); }
+.arch-conf-score {
+  font-family: 'Syne', sans-serif;
+  font-size: 10px; font-weight: 700; color: var(--ghost);
+  white-space: nowrap;
+}
+
+.arch-levels-row {
+  display: flex; flex-wrap: wrap; gap: 20px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.arch-level-item {}
+.arch-level-lbl {
+  font-family: 'Syne', sans-serif;
+  font-size: 7px; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--ghost); margin-bottom: 3px;
+}
+.arch-level-val {
+  font-family: 'Syne', sans-serif;
+  font-size: 16px; font-weight: 800;
+  letter-spacing: 0.04em; color: var(--text);
+}
+
+.arch-runner-up {
+  margin-top: 12px; padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+}
+.arch-ru-label {
+  font-family: 'Syne', sans-serif;
+  font-size: 7px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ghost);
+}
+.arch-ru-item {
+  font-family: 'Syne', sans-serif;
+  font-size: 8px; font-weight: 700; letter-spacing: 0.1em;
+  padding: 1px 8px; border-radius: 2px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.03);
+  color: var(--ghost);
+}
+
+/* RTH Bias factors grid */
+.rth-hero {
+  padding: 18px 24px; margin-bottom: 10px;
+  border: 1px solid var(--border); border-radius: 2px;
+  background: var(--surface);
+  display: flex; align-items: flex-start; gap: 24px; flex-wrap: wrap;
+  opacity: 0;
+  animation: fadeUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.08s forwards;
+}
+.rth-verdict-block { flex-shrink: 0; }
+.rth-verdict {
+  font-family: 'Syne', sans-serif;
+  font-size: 22px; font-weight: 800;
+  letter-spacing: 0.06em; margin-bottom: 4px;
+}
+.rth-verdict.bull  { color: var(--bull); }
+.rth-verdict.bear  { color: var(--bear); }
+.rth-verdict.mixed { color: var(--mixed); }
+.rth-verdict.ghost { color: var(--ghost); }
+.rth-score-row { font-size: 10px; color: var(--ghost); margin-bottom: 8px; }
+
+.rth-factors { flex: 1; min-width: 240px; }
+.rth-factor-row {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.rth-factor-row:last-child { border-bottom: none; }
+.rth-factor-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 8px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--ghost); min-width: 110px;
+}
+.rth-factor-val {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.05em;
+}
+.rth-factor-val.bull  { color: var(--bull); }
+.rth-factor-val.bear  { color: var(--bear); }
+.rth-factor-val.mixed { color: var(--mixed); }
+.rth-factor-val.ghost { color: var(--ghost); }
+.rth-factor-interp {
+  font-size: 9.5px; color: var(--ghost); flex: 1; font-style: italic;
+  display: none;
+}
+.rth-factor-row:hover .rth-factor-interp { display: block; }
+.rth-summary {
+  font-size: 11px; color: var(--muted); font-style: italic;
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+
 /* ── INTRADAY TAB ────────────────────────────────── */
 .air-pocket-banner {
   display: flex; align-items: flex-start; gap: 16px;
@@ -779,7 +966,7 @@ footer .alph { color: rgba(255,255,255,0.55); }
 
   <nav class="tab-bar">
     <button class="tab-btn active" data-tab="bias" onclick="switchTab('bias')">Macro Bias</button>
-    <button class="tab-btn" data-tab="intraday" onclick="switchTab('intraday')">Intraday Bias</button>
+    <button class="tab-btn" data-tab="intraday" onclick="switchTab('intraday')">RTH Bias</button>
     <button class="tab-btn" data-tab="levels" onclick="switchTab('levels')">Levels</button>
   </nav>
 
@@ -1510,7 +1697,29 @@ function loadLevels() {
     });
 }
 
-// ── INTRADAY HELPERS ──────────────────────────────
+// ── RTH / INTRADAY HELPERS ────────────────────────
+const ARCH_SIGNAL_LABELS = {
+  near_flip:      'Near gamma flip',
+  dex_positive:   'DEX positive',
+  dex_negative:   'DEX negative',
+  call_bias:      'Call-side flow',
+  put_bias:       'Put-side flow',
+  put_wall_near:  'Put wall proximal',
+  call_wall_near: 'Call wall overhead',
+  charm_positive: 'Charm positive',
+  charm_negative: 'Charm negative',
+  above_flip:     'Above flip',
+  well_above_flip:'Well above flip',
+  extended_above: 'Extended above',
+  well_below_flip:'Well below flip',
+  extended_below: 'Extended below',
+  room_to_run:    'No cap overhead',
+  room_to_fall:   'No floor below',
+  call_buying:    'Broad call buying',
+  put_buying:     'Broad put buying',
+};
+function archSignalLabel(key) { return ARCH_SIGNAL_LABELS[key] || key; }
+
 function intradayBiasClass(bias) {
   if (!bias) return "mixed";
   const u = bias.toUpperCase();
@@ -1537,12 +1746,166 @@ function gammaRegClass(r) {
   return "ghost";
 }
 
-// ── RENDER INTRADAY ────────────────────────────────
+// ── RENDER RTH BIAS ────────────────────────────────
 function renderIntraday(d) {
   const app = document.getElementById("intraday-app");
   clearEl(app);
 
-  // AIR POCKET WATCH banner
+  // ── REFRESH STATUS BAR ──────────────────────────
+  const iRefreshBar = el("div", {className:"lvl-refresh-status"});
+  iRefreshBar.appendChild(el("div", {id:"intraday-last-updated", className:"refresh-label"}, "Loading…"));
+  iRefreshBar.appendChild(el("div", {id:"intraday-refresh-countdown", className:"refresh-countdown"}, ""));
+  app.appendChild(iRefreshBar);
+
+  // ── BIG OPEN ARCHETYPE PANEL ────────────────────
+  app.appendChild(secLbl("Today's Predicted Open"));
+  const arch      = d.open_archetype;
+  const archDir   = d.open_archetype_dir || "ghost";
+  const archName  = d.open_archetype_name || (arch || "No Signal");
+  const archShort = d.open_archetype_short || arch || "—";
+  const archConf  = d.open_archetype_confidence || 0;
+  const archDesc  = d.open_archetype_desc || "";
+  const archAct   = d.open_archetype_action || "";
+  const archSigs  = d.open_archetype_signals || [];
+
+  const archHero = el("div", {className:"arch-hero " + archDir});
+  archHero.appendChild(el("div", {className:"arch-eyebrow"}, "Open Archetype · NQ Futures"));
+  archHero.appendChild(el("div", {className:"arch-name " + archDir}, archName));
+  if (archShort && archShort !== archName) {
+    archHero.appendChild(el("div", {className:"arch-short " + archDir}, archShort));
+  }
+
+  if (archDesc) {
+    archHero.appendChild(el("div", {className:"arch-desc"}, archDesc));
+  }
+
+  if (archAct) {
+    const actBox = el("div", {className:"arch-action " + archDir});
+    actBox.appendChild(el("strong", {}, "ACTION: "));
+    actBox.appendChild(document.createTextNode(archAct));
+    archHero.appendChild(actBox);
+  }
+
+  if (archSigs.length) {
+    const sigsRow = el("div", {className:"arch-signals"});
+    archSigs.forEach(function(s) {
+      sigsRow.appendChild(el("span", {className:"arch-chip"}, archSignalLabel(s)));
+    });
+    archHero.appendChild(sigsRow);
+  }
+
+  // Confidence bar (max 5)
+  const confRow = el("div", {className:"arch-conf-row"});
+  confRow.appendChild(el("span", {className:"arch-conf-label"}, "Signal strength"));
+  const confBar = el("div", {className:"arch-conf-bar"});
+  const confFill = el("div", {className:"arch-conf-fill " + archDir});
+  confFill.style.width = Math.round(Math.min(100, archConf / 5 * 100)) + "%";
+  confBar.appendChild(confFill);
+  confRow.appendChild(confBar);
+  confRow.appendChild(el("span", {className:"arch-conf-score"}, archConf + " / 5"));
+  archHero.appendChild(confRow);
+
+  // Key levels row
+  const levRow = el("div", {className:"arch-levels-row"});
+  if (d.gamma_flip != null) {
+    const li1 = el("div", {className:"arch-level-item"});
+    li1.appendChild(el("div", {className:"arch-level-lbl"}, "Gamma Flip"));
+    li1.appendChild(el("div", {className:"arch-level-val", style:{color:"var(--flip)"}},
+      d.gamma_flip.toLocaleString("en-US", {minimumFractionDigits:1, maximumFractionDigits:1})));
+    levRow.appendChild(li1);
+  }
+  if (d.nq_price != null) {
+    const li2 = el("div", {className:"arch-level-item"});
+    li2.appendChild(el("div", {className:"arch-level-lbl"}, "NQ Price"));
+    li2.appendChild(el("div", {className:"arch-level-val"},
+      d.nq_price.toLocaleString("en-US", {minimumFractionDigits:1, maximumFractionDigits:1})));
+    levRow.appendChild(li2);
+  }
+  const tw = d.top_wall;
+  if (tw && tw.strike_futures != null) {
+    const isBull = (tw.net_gex || 0) < 0;
+    const li3 = el("div", {className:"arch-level-item"});
+    li3.appendChild(el("div", {className:"arch-level-lbl"}, isBull ? "Top Put Wall" : "Top Call Wall"));
+    li3.appendChild(el("div", {className:"arch-level-val",
+      style:{color: isBull ? "var(--bull)" : "var(--bear)"}},
+      tw.strike_futures.toFixed(1)));
+    levRow.appendChild(li3);
+  }
+  if (levRow.childNodes.length) archHero.appendChild(levRow);
+
+  // Runner-up
+  if (d.open_archetype_runner_up) {
+    const ruRow = el("div", {className:"arch-runner-up"});
+    ruRow.appendChild(el("span", {className:"arch-ru-label"}, "Other signals:"));
+    const allScores = d.open_archetype_all_scores || {};
+    Object.keys(allScores).forEach(function(t) {
+      if (t === arch || !allScores[t]) return;
+      const label = t + "  " + allScores[t] + "/5";
+      ruRow.appendChild(el("span", {className:"arch-ru-item"}, label));
+    });
+    archHero.appendChild(ruRow);
+  }
+
+  // Updated timestamp right-aligned inside hero
+  const updRow = el("div", {style:{marginTop:"14px",paddingTop:"10px",
+    borderTop:"1px solid rgba(255,255,255,0.06)",
+    display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"10px"}});
+  updRow.appendChild(el("div", {style:{fontSize:"9px",color:"var(--ghost)"}},
+    "Updated " + (d.updated || "—") + "  ·  " + (d.pred_date || "")));
+  app.appendChild(archHero);
+
+  // ── RTH MACRO BIAS ──────────────────────────────
+  app.appendChild(secLbl("RTH Macro Backdrop"));
+  const rthHero = el("div", {className:"rth-hero"});
+
+  const rthVerdict = d.rth_bias || "UNKNOWN";
+  const rthCls     = d.rth_bias_cls || "ghost";
+  const rthLabel   = d.rth_bias_label || rthVerdict;
+  const rthSummary = d.rth_bias_summary || "";
+
+  const verdictBlock = el("div", {className:"rth-verdict-block"});
+  verdictBlock.appendChild(el("div", {className:"arch-eyebrow"}, "RTH Bias"));
+  verdictBlock.appendChild(el("div", {className:"rth-verdict " + rthCls}, rthLabel));
+  const bCount = d.rth_bull_count || 0, beCount = d.rth_bear_count || 0;
+  verdictBlock.appendChild(el("div", {className:"rth-score-row"},
+    "Bull signals: " + bCount + "  ·  Bear signals: " + beCount));
+  rthHero.appendChild(verdictBlock);
+
+  // Factors table
+  const factorsDiv = el("div", {className:"rth-factors"});
+  const rf = d.rth_factors || {};
+  const factorRows = [
+    { name: "2Y Yield",    key: "yield" },
+    { name: "Liquidity",   key: "liquidity" },
+    { name: "COT Crowd",   key: "cot" },
+    { name: "BOJ / Carry", key: "boj" },
+  ];
+  factorRows.forEach(function(fr) {
+    const f = rf[fr.key] || {};
+    const row = el("div", {className:"rth-factor-row"});
+    row.appendChild(el("span", {className:"rth-factor-name"}, fr.name));
+    const valSpan = el("span", {className:"rth-factor-val " + (f.cls || "ghost")},
+      f.label || f.signal || "—");
+    if (fr.key === "cot" && f.pctile != null) {
+      valSpan.textContent += "  (" + f.pctile + "th)";
+    }
+    if (fr.key === "boj" && f.usdjpy != null) {
+      valSpan.textContent += "  USDJPY " + f.usdjpy;
+    }
+    row.appendChild(valSpan);
+    if (f.interp) {
+      row.appendChild(el("span", {className:"rth-factor-interp"}, f.interp));
+    }
+    factorsDiv.appendChild(row);
+  });
+
+  if (rthSummary) {
+    factorsDiv.appendChild(el("div", {className:"rth-summary"}, rthSummary));
+  }
+  rthHero.appendChild(factorsDiv);
+  app.appendChild(rthHero);
+
+  // AIR POCKET WATCH banner (if active)
   if (d.air_pocket_watch) {
     const banner = el("div", {className:"air-pocket-banner"});
     banner.appendChild(el("div", {className:"apw-icon"}, "⚡"));
@@ -1554,73 +1917,11 @@ function renderIntraday(d) {
     app.appendChild(banner);
   }
 
-  // Hero
-  const biasClass = intradayBiasClass(d.intraday_bias);
-  const hero = el("div", {className:"iday-hero " + biasClass});
-  const heroL = el("div");
-  heroL.appendChild(el("div", {className:"hero-eyebrow"}, "Intraday NQ Bias"));
-  heroL.appendChild(el("div", {className:"iday-label " + biasClass}, d.intraday_bias || "UNKNOWN"));
-  heroL.appendChild(el("span", {className:"iday-conf " + confidenceClass(d.confidence)},
-    d.confidence || "—"));
-  if (d.reason && !d.air_pocket_watch) {
-    heroL.appendChild(el("div", {className:"iday-reason"}, d.reason));
-  }
-  hero.appendChild(heroL);
-  const heroR = el("div", {style:{textAlign:"right",flexShrink:"0"}});
-  heroR.appendChild(el("div", {className:"wlbl"}, "Updated"));
-  heroR.appendChild(el("div", {className:"wval"}, d.updated || "—"));
-  if (d.pred_date) {
-    heroR.appendChild(el("div", {className:"wlbl", style:{marginTop:"10px"}}, "Pred Date"));
-    heroR.appendChild(el("div", {className:"wval"}, d.pred_date));
-  }
-  hero.appendChild(heroR);
-  app.appendChild(hero);
+  // ── OPTIONS CONTEXT (secondary) ────────────────
+  app.appendChild(secLbl("Options Structure"));
 
-  // Intraday refresh bar
-  const iRefreshBar = el("div", {className:"lvl-refresh-status"});
-  iRefreshBar.appendChild(el("div", {id:"intraday-last-updated", className:"refresh-label"}, "Loading…"));
-  iRefreshBar.appendChild(el("div", {id:"intraday-refresh-countdown", className:"refresh-countdown"}, ""));
-  app.appendChild(iRefreshBar);
-
-  // Row 1: Entropy | Gamma Regime | GEX Dispersion
-  app.appendChild(secLbl("Market State"));
+  // GEX + Gamma Regime row
   const row1 = el("div", {className:"g3"});
-
-  const entCard = card("Return Entropy Gate");
-  const entState = d.entropy_state || "UNKNOWN";
-  entCard.appendChild(el("div", {className:"iday-state-badge " + entropyClass(entState)}, entState));
-  entCard.appendChild(kv("H returns (20d)", d.H_returns != null ? d.H_returns.toFixed(3) : "—"));
-  entCard.appendChild(kv("Critical threshold", d.H_threshold != null ? d.H_threshold.toFixed(3) : "—"));
-  if (d.H_returns != null && d.H_threshold != null) {
-    const maxH = (Math.max(d.H_returns, d.H_threshold) * 1.18) || 1;
-    const eBar = el("div", {className:"pb-w"});
-    const eFill = el("div", {className:"pb-f"});
-    eFill.style.width = Math.min(100, d.H_returns / maxH * 100) + "%";
-    eFill.style.background = entState === "CRITICAL" ? "var(--bear)" : "var(--bull)";
-    const eMark = el("div", {className:"pb-m"});
-    eMark.style.left = Math.min(100, d.H_threshold / maxH * 100) + "%";
-    eBar.appendChild(eFill);
-    eBar.appendChild(eMark);
-    entCard.appendChild(eBar);
-    entCard.appendChild(el("div", {style:{fontSize:"8px",color:"var(--ghost)",marginBottom:"4px"}},
-      "fill = current entropy · marker = 75th-pctile threshold"));
-  }
-  if (entState === "CRITICAL") {
-    entCard.appendChild(el("div", {className:"interp bad"},
-      "Disordered tape — entropy above the 252-day 75th-percentile. Options levels carry "
-      + "no directional edge; walls are unlikely to hold. Bias gated to NO_BIAS."));
-  } else if (entState === "STABLE") {
-    entCard.appendChild(el("div", {className:"interp good"},
-      "Orderly tape — entropy below threshold. Price is respecting structure: walls are "
-      + "likely to hold and fading extremes toward levels carries edge."));
-  } else {
-    entCard.appendChild(el("div", {className:"interp"},
-      "Entropy unavailable — historical price feed unreachable. Gate inactive."));
-  }
-  if (d.price_source) {
-    entCard.appendChild(kv("Source", d.price_source + " daily", {color:"var(--ghost)",fontSize:"9px"}));
-  }
-  row1.appendChild(entCard);
 
   const gamCard = card("Gamma Regime");
   const gamReg = d.gamma_regime || "UNKNOWN";
@@ -1637,6 +1938,38 @@ function renderIntraday(d) {
   }
   row1.appendChild(gamCard);
 
+  const entCard = card("Return Entropy Gate");
+  const entState = d.entropy_state || "UNKNOWN";
+  entCard.appendChild(el("div", {className:"iday-state-badge " + entropyClass(entState)}, entState));
+  entCard.appendChild(kv("H returns (20d)", d.H_returns != null ? d.H_returns.toFixed(3) : "—"));
+  entCard.appendChild(kv("Critical threshold", d.H_threshold != null ? d.H_threshold.toFixed(3) : "—"));
+  if (d.H_returns != null && d.H_threshold != null) {
+    const maxH = (Math.max(d.H_returns, d.H_threshold) * 1.18) || 1;
+    const eBar = el("div", {className:"pb-w"});
+    const eFill = el("div", {className:"pb-f"});
+    eFill.style.width = Math.min(100, d.H_returns / maxH * 100) + "%";
+    eFill.style.background = entState === "CRITICAL" ? "var(--bear)" : "var(--bull)";
+    const eMark = el("div", {className:"pb-m"});
+    eMark.style.left = Math.min(100, d.H_threshold / maxH * 100) + "%";
+    eBar.appendChild(eFill); eBar.appendChild(eMark);
+    entCard.appendChild(eBar);
+    entCard.appendChild(el("div", {style:{fontSize:"8px",color:"var(--ghost)",marginBottom:"4px"}},
+      "fill = current entropy · marker = 75th-pctile threshold"));
+  }
+  if (entState === "CRITICAL") {
+    entCard.appendChild(el("div", {className:"interp bad"},
+      "Disordered tape — entropy above 75th-pctile. Options walls carry no directional edge."));
+  } else if (entState === "STABLE") {
+    entCard.appendChild(el("div", {className:"interp good"},
+      "Orderly tape — walls are likely to hold; fading extremes carries edge."));
+  } else {
+    entCard.appendChild(el("div", {className:"interp"}, "Entropy gate unavailable."));
+  }
+  if (d.price_source) {
+    entCard.appendChild(kv("Source", d.price_source + " daily", {color:"var(--ghost)",fontSize:"9px"}));
+  }
+  row1.appendChild(entCard);
+
   const gexCard = card("GEX Dispersion");
   const hgex = d.H_GEX_norm != null ? d.H_GEX_norm : 0.5;
   const hgexColor = hgex > 0.6 ? "var(--mixed)" : hgex < 0.3 ? "var(--bull)" : "var(--muted)";
@@ -1652,24 +1985,23 @@ function renderIntraday(d) {
   gexCard.appendChild(hbarW);
   if (hgex > 0.6) {
     gexCard.appendChild(el("div", {className:"interp", style:{marginTop:"8px"}},
-      "Dispersed GEX: confidence penalized ×0.7"));
+      "Dispersed GEX: no dominant wall, confidence penalized."));
   } else {
     gexCard.appendChild(kv("Wall concentration", hgex < 0.3 ? "High" : "Moderate"));
   }
   row1.appendChild(gexCard);
   app.appendChild(row1);
 
-  // Row 2: PCA + Top Wall
-  app.appendChild(secLbl("Price Structure"));
+  // PCA + Top Wall
   const row2 = el("div", {className:"g2"});
 
   const pcaCard = card("PCA Price Structure");
-  const exp = d.pca_explained || [];
+  const pcaExp = d.pca_explained || [];
   let anyPC = false;
   [
-    {key:"PC1 · trend / momentum", val:d.PC1, ex:exp[0]},
-    {key:"PC2 · curvature",        val:d.PC2, ex:exp[1]},
-    {key:"PC3 · vol regime",       val:d.PC3, ex:exp[2]},
+    {key:"PC1 · trend / momentum", val:d.PC1, ex:pcaExp[0]},
+    {key:"PC2 · curvature",        val:d.PC2, ex:pcaExp[1]},
+    {key:"PC3 · vol regime",       val:d.PC3, ex:pcaExp[2]},
   ].forEach(function(p) {
     if (p.val == null) return;
     anyPC = true;
@@ -1680,27 +2012,24 @@ function renderIntraday(d) {
     const pw = el("div", {className:"pbar-w", style:{marginBottom:"8px"}});
     const pf = el("div", {className:"pbar " + (p.val > 0 ? "bull" : "bear")});
     pf.style.width = Math.min(100, Math.abs(p.val) * 25) + "%";
-    pw.appendChild(pf);
-    pcaCard.appendChild(pw);
+    pw.appendChild(pf); pcaCard.appendChild(pw);
   });
   if (!anyPC) {
-    pcaCard.appendChild(el("div", {className:"interp"},
-      "PCA unavailable — historical price feed unreachable."));
+    pcaCard.appendChild(el("div", {className:"interp"}, "PCA unavailable — price feed unreachable."));
   } else {
     const pc1 = d.PC1 || 0;
     const ext = Math.abs(pc1);
     let pcaMsg, pcaCls;
     if (ext > 2.0) {
       pcaMsg = (pc1 > 0 ? "Strongly extended upward" : "Strongly extended downward")
-        + " price structure — market is trending hard; levels are prone to break, not hold.";
+        + " — levels prone to break.";
       pcaCls = "interp bad";
     } else if (ext > 0.9) {
       pcaMsg = (pc1 > 0 ? "Moderate upward" : "Moderate downward")
-        + " price structure — directional but not extreme; levels may hold with a directional skew.";
+        + " — directional with levels skewed.";
       pcaCls = "interp";
     } else {
-      pcaMsg = "Balanced / consolidating price structure — no dominant trend; "
-        + "levels are more likely to hold and contain price.";
+      pcaMsg = "Balanced / consolidating — levels more likely to hold.";
       pcaCls = "interp good";
     }
     pcaCard.appendChild(el("div", {className:pcaCls}, pcaMsg));
@@ -1711,7 +2040,6 @@ function renderIntraday(d) {
   }
   row2.appendChild(pcaCard);
 
-  const tw = d.top_wall;
   const twCard = card("Top Wall");
   if (tw) {
     const isBull = (tw.net_gex || 0) < 0;
@@ -1733,47 +2061,23 @@ function renderIntraday(d) {
   row2.appendChild(twCard);
   app.appendChild(row2);
 
-  // MM Intensification
-  app.appendChild(secLbl("MM Intensification · Today"));
-  const mm = d.mm_intensification || [];
-  const mmCard = el("div", {className:"card", style:{padding:"0",overflow:"hidden",animationDelay:"0.15s"}});
-  if (mm.length === 0) {
-    mmCard.appendChild(el("div", {className:"lvl-empty"},
-      "No log data — freeflow_logger.py needs ≥2 snapshots today"));
-  } else {
-    const scroll = el("div", {style:{overflowX:"auto"}});
-    const tbl = el("table", {className:"lvl-full-tbl"});
-    const thead = el("thead");
-    const htr = el("tr");
-    ["Strike", "GEX Snap1", "GEX Snap2", "Δ GEX", "Score", "Direction"].forEach(function(h) {
-      htr.appendChild(el("th", {}, h));
-    });
-    thead.appendChild(htr);
-    tbl.appendChild(thead);
-    const tbody2 = el("tbody");
-    mm.forEach(function(m) {
-      const tr = el("tr");
-      const dc2 = m.direction === "BUILDING_NEGATIVE" ? "bear" : "bull";
-      tr.appendChild(el("td", {style:{fontWeight:"500"}}, m.strike_futures.toFixed(1)));
-      tr.appendChild(el("td", {style:{color:"var(--muted)"}}, fmtGex(m.gex_snap1)));
-      tr.appendChild(el("td", {style:{color:"var(--muted)"}}, fmtGex(m.gex_snap2)));
-      tr.appendChild(el("td", {style:{color: m.gex_delta >= 0 ? "var(--bull)" : "var(--bear)"}},
-        fmtGex(m.gex_delta)));
-      tr.appendChild(el("td", {}, m.intensification_score.toFixed(3)));
-      const dtd = el("td");
-      dtd.appendChild(el("span", {className:"type-tag " + dc2},
-        m.direction.replace("BUILDING_", "")));
-      tr.appendChild(dtd);
-      tbody2.appendChild(tr);
-    });
-    tbl.appendChild(tbody2);
-    scroll.appendChild(tbl);
-    mmCard.appendChild(scroll);
+  // Options flow bias verdict (secondary)
+  app.appendChild(secLbl("Options Flow Bias"));
+  const biasClass = intradayBiasClass(d.intraday_bias);
+  const optHero = el("div", {className:"iday-hero " + biasClass});
+  const optL = el("div");
+  optL.appendChild(el("div", {className:"hero-eyebrow"}, "GEX / Entropy / PCA Classifier"));
+  optL.appendChild(el("div", {className:"iday-label " + biasClass}, d.intraday_bias || "UNKNOWN"));
+  optL.appendChild(el("span", {className:"iday-conf " + confidenceClass(d.confidence)},
+    d.confidence || "—"));
+  if (d.reason) {
+    optL.appendChild(el("div", {className:"iday-reason"}, d.reason));
   }
-  app.appendChild(mmCard);
+  optHero.appendChild(optL);
+  app.appendChild(optHero);
 
-  // Macro context
-  app.appendChild(secLbl("Macro Context"));
+  // Macro Context
+  app.appendChild(secLbl("Weekly Macro Context"));
   const macroCtx = el("div", {className:"g2"});
   const mcCard = card("Weekly Macro Bias");
   const mbias = d.macro_bias || "UNKNOWN";
@@ -1782,7 +2086,7 @@ function renderIntraday(d) {
     mcCard.appendChild(el("span", {className:"rscore"}, String(d.macro_regime.name)));
   }
   mcCard.appendChild(el("div", {className:"interp", style:{marginTop:"10px"}},
-    "Macro bias is a fixed prior modulating intraday confidence, not the primary signal."));
+    "Weekly macro confluence from Layer 1. Used as tiebreaker in RTH bias scoring."));
   macroCtx.appendChild(mcCard);
 
   const lvlCtxCard = card("Vol Regime");

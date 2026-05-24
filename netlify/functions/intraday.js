@@ -12,17 +12,13 @@ const BASE_URL = 'https://www.free-flow.site/api';
 
 const OUT_HEADERS = { ...BASE_HEADERS, 'Cache-Control': 'public, max-age=240' };
 
-// ── INTRADAY CONSTANTS ────────────────────────────────────────────────────────
+// ── CONSTANTS ─────────────────────────────────────────────────────────────────
 const NEAR_FLIP_BUFFER     = 50.0;
 const H_GEX_CONFIDENCE_CUT = 0.6;
 const STRONG_WALL          = 60.0;
 const EXCEPTIONAL_WALL     = 75.0;
 const AIR_POCKET_PROXIMITY = 150.0;
-// e-folding distance: score × exp(-dist/PROXIMITY_EFOLD).
-// At dist=200 pts, weight decays to 1/e ≈ 37% of peak.
-// True halflife = 200 × ln(2) ≈ 139 pts.
-// Previously misnamed PROXIMITY_HALFLIFE.
-const PROXIMITY_EFOLD = 200.0;
+const PROXIMITY_EFOLD      = 200.0;
 
 // Return-entropy params
 const ENTROPY_WINDOW   = 20;
@@ -41,8 +37,64 @@ const MACRO_BEAR = new Set(['STRONG BEAR', 'LEAN BEAR']);
 let macroBiasData = null;
 try { macroBiasData = require('../../bias_output.json'); } catch (e) { macroBiasData = null; }
 
-// ── YAHOO FINANCE DAILY OHLC ──────────────────────────────────────────────────
-// Fetches ~2 years of daily bars. Tries NQ futures first, falls back to QQQ.
+// ── METHODOLOGY CONFIG LOADER ─────────────────────────────────────────────────
+// Loads from METHODOLOGY_CONFIG env var (Netlify production), then falls back to
+// the local file (dev). Committed code never requires the local file directly
+// so esbuild does not fail when the gitignored file is absent.
+let _methodologyConfig = null;
+function getConfig() {
+  if (_methodologyConfig) return _methodologyConfig;
+  if (process.env.METHODOLOGY_CONFIG) {
+    try {
+      _methodologyConfig = JSON.parse(
+        Buffer.from(process.env.METHODOLOGY_CONFIG, 'base64').toString('utf8')
+      );
+      return _methodologyConfig;
+    } catch (_) {}
+  }
+  try {
+    _methodologyConfig = require('./lib/methodology_config');
+    return _methodologyConfig;
+  } catch (_) {}
+  _methodologyConfig = _emptyConfig();
+  return _methodologyConfig;
+}
+
+function _emptyConfig() {
+  const empty = (cls) => ({ label: '', cls, interp: '' });
+  return {
+    archetypes: {
+      TYPE_A: { name: 'TYPE_A', short: 'TYPE_A', desc: '', action: '', signal_keys: [] },
+      TYPE_B: { name: 'TYPE_B', short: 'TYPE_B', desc: '', action: '', signal_keys: [] },
+      TYPE_C: { name: 'TYPE_C', short: 'TYPE_C', desc: '', action: '', signal_keys: [] },
+      TYPE_D: { name: 'TYPE_D', short: 'TYPE_D', desc: '', action: '', signal_keys: [] },
+    },
+    rthBias: {
+      BULLISH: { label: 'RTH BULLISH', cls: 'bull',  summary: '' },
+      BEARISH: { label: 'RTH BEARISH', cls: 'bear',  summary: '' },
+      NEUTRAL: { label: 'RTH NEUTRAL', cls: 'mixed', summary: '' },
+      UNKNOWN: { label: 'RTH UNKNOWN', cls: 'ghost', summary: '' },
+    },
+    yieldSignals: {
+      RISING_FAST: empty('bear'), RISING: empty('bear'),
+      STABLE: empty('mixed'),     FALLING: empty('bull'), UNAVAILABLE: empty('ghost'),
+    },
+    bojSignals: {
+      CARRY_UNWIND: empty('bear'), YEN_STABLE: empty('mixed'),
+      YEN_WEAKENING: empty('bull'), UNAVAILABLE: empty('ghost'),
+    },
+    cotLabels: {
+      FUMES_LONG: empty('bear'), EXTREME_SHORT: empty('bull'),
+      NEUTRAL: empty('mixed'),   UNAVAILABLE: empty('ghost'),
+    },
+    liquidityLabels: {
+      IMPROVING: empty('bull'), STABLE: empty('mixed'),
+      DETERIORATING: empty('bear'), UNAVAILABLE: empty('ghost'),
+    },
+  };
+}
+
+// ── YAHOO FINANCE ─────────────────────────────────────────────────────────────
 async function fetchYahooDaily() {
   const symbols = ['NQ=F', 'QQQ'];
   const hosts   = ['query1.finance.yahoo.com', 'query2.finance.yahoo.com'];
@@ -66,14 +118,37 @@ async function fetchYahooDaily() {
           bars.push({ open: o, high: h, low: l, close: c });
         }
         if (bars.length >= ENTROPY_MIN_BARS) return { bars, source: sym };
-      } catch (_) { /* try next combination */ }
+      } catch (_) {}
     }
   }
   return null;
 }
 
+// Fetches recent daily closes for a single symbol (1 month of data).
+async function fetchYahooSymbol(symbol, minBars) {
+  const hosts = ['query1.finance.yahoo.com', 'query2.finance.yahoo.com'];
+  const ua    = { 'User-Agent': AGENT_HEADERS['User-Agent'], 'Accept': 'application/json' };
+  for (const host of hosts) {
+    try {
+      const url  = `https://${host}/v8/finance/chart/${encodeURIComponent(symbol)}?range=1mo&interval=1d`;
+      const data = await httpGetJson(url, ua, 7000);
+      const res  = data && data.chart && data.chart.result && data.chart.result[0];
+      if (!res) continue;
+      const ts = res.timestamp || [];
+      const q  = (res.indicators && res.indicators.quote && res.indicators.quote[0]) || {};
+      const bars = [];
+      for (let i = 0; i < ts.length; i++) {
+        const c = q.close && q.close[i];
+        if (c == null || c <= 0) continue;
+        bars.push({ close: c });
+      }
+      if (bars.length >= (minBars || 4)) return bars;
+    } catch (_) {}
+  }
+  return null;
+}
+
 // ── RETURN ENTROPY ────────────────────────────────────────────────────────────
-// Equal-width histogram entropy — matches numpy.histogram behaviour.
 function histEntropy(values, bins) {
   if (!values.length) return 0;
   let mn = Infinity, mx = -Infinity;
@@ -92,7 +167,6 @@ function histEntropy(values, bins) {
   return H;
 }
 
-// Linear-interpolation percentile — matches numpy.percentile default.
 function percentile(sortedAsc, pct) {
   const n = sortedAsc.length;
   if (n === 0) return null;
@@ -103,9 +177,6 @@ function percentile(sortedAsc, pct) {
   return sortedAsc[lo] + (sortedAsc[hi] - sortedAsc[lo]) * (idx - lo);
 }
 
-// Shannon entropy of the most recent ENTROPY_WINDOW returns vs a backward-looking
-// 75th-percentile threshold computed over ENTROPY_LOOKBACK prior windows.
-// CRITICAL = disordered tape → options walls carry no directional edge.
 function computeReturnEntropy(closes) {
   if (closes.length < ENTROPY_MIN_BARS + ENTROPY_WINDOW)
     return { entropy_state: 'UNKNOWN', H_returns: null, H_threshold: null };
@@ -137,10 +208,6 @@ function computeReturnEntropy(closes) {
 }
 
 // ── PCA PRICE STRUCTURE ───────────────────────────────────────────────────────
-// Features: [oc_ret, hl_range, mom_5d, mom_10d, mom_20d, rvol_5d, rvol_10d, rvol_20d]
-// Scaler: StandardScaler (population std, ddof=0) — matches sklearn default.
-// Covariance: sample (ddof=1). Eigenvectors: cyclic Jacobi (verified correct).
-// PC1 oriented so positive = upward momentum (features 2-4 are mom_5/10/20d).
 function buildPCAFeatures(bars) {
   const n      = bars.length;
   const closes = bars.map(b => b.close);
@@ -149,7 +216,6 @@ function buildPCAFeatures(bars) {
 
   const pctChange = (i, k) => (i - k < 0 ? null : closes[i] / closes[i - k] - 1);
 
-  // Sample std (ddof=1) — matches pandas rolling().std() default.
   const rollStd = (i, k) => {
     if (i - k + 1 < 1) return null;
     const slice = [];
@@ -178,9 +244,6 @@ function buildPCAFeatures(bars) {
   return rows;
 }
 
-// Cyclic Jacobi eigendecomposition for a symmetric n×n matrix.
-// Returns eigenvalues (diagonal of transformed A) and eigenvectors (columns of V).
-// Convergence: sum of squared off-diagonal elements < 1e-22.
 function jacobiEigen(matrix) {
   const n = matrix.length;
   const a = matrix.map(r => r.slice());
@@ -232,7 +295,6 @@ function computePCA(bars) {
 
   const n = rows.length, d = rows[0].length;
 
-  // StandardScaler: population std (ddof=0) — matches sklearn StandardScaler.
   const means = new Array(d).fill(0), stds = new Array(d).fill(0);
   for (const r of rows) for (let j = 0; j < d; j++) means[j] += r[j];
   for (let j = 0; j < d; j++) means[j] /= n;
@@ -240,7 +302,6 @@ function computePCA(bars) {
   for (let j = 0; j < d; j++) { stds[j] = Math.sqrt(stds[j] / n); if (!isFinite(stds[j]) || stds[j] === 0) stds[j] = 1; }
   const std = rows.map(r => r.map((x, j) => (x - means[j]) / stds[j]));
 
-  // Sample covariance (ddof=1) — Xᵀ X / (n-1).
   const C = Array.from({ length: d }, () => new Array(d).fill(0));
   for (const r of std) for (let i = 0; i < d; i++) for (let j = i; j < d; j++) C[i][j] += r[i] * r[j];
   for (let i = 0; i < d; i++) for (let j = i; j < d; j++) { C[i][j] /= (n - 1); C[j][i] = C[i][j]; }
@@ -254,7 +315,6 @@ function computePCA(bars) {
   for (let k = 0; k < 3; k++) {
     let evec = eigenvectors[order[k]].slice();
     if (k === 0) {
-      // Orient PC1 so positive = upward momentum (features 2,3,4 = mom_5/10/20d).
       if (evec[2] + evec[3] + evec[4] < 0) evec = evec.map(x => -x);
     } else {
       let mi = 0, ma = 0;
@@ -267,10 +327,6 @@ function computePCA(bars) {
     explained.push(Math.round(Math.max(0, eigenvalues[order[k]]) / totalVar * 1000) / 10);
   }
 
-  // Verify PC1 is actually a momentum axis before trusting its sign.
-  // Features 2,3,4 (indices) are mom_5d, mom_10d, mom_20d in the loading vector.
-  // If their combined absolute loading is weak (< 0.3 of unit vector magnitude),
-  // PC1 may be dominated by the vol cluster — mark pc1_momentum_valid: false.
   const pc1LoadingVec  = eigenvectors[order[0]];
   const momLoadingSum  = Math.abs(pc1LoadingVec[2]) + Math.abs(pc1LoadingVec[3]) + Math.abs(pc1LoadingVec[4]);
   const pc1Valid       = explained[0] > 0 && momLoadingSum > 0.3;
@@ -284,10 +340,7 @@ function computePCA(bars) {
   };
 }
 
-// ── INTRADAY-SPECIFIC FEATURES ────────────────────────────────────────────────
-
-// Shannon entropy of the |GEX| distribution across nearby strikes, normalised
-// by log2(N). Values > H_GEX_CONFIDENCE_CUT indicate no dominant wall — penalises confidence.
+// ── GEX STRUCTURE ─────────────────────────────────────────────────────────────
 function computeHGEXNorm(levels) {
   if (!levels.length) return 0.5;
   const gexAbs = levels.map(l => Math.abs(l.net_gex || 0));
@@ -299,7 +352,6 @@ function computeHGEXNorm(levels) {
   return Hmax > 0 ? Math.round(H / Hmax * 10000) / 10000 : 0.0;
 }
 
-// Proximity-weighted top wall: scores each level by raw score × exp(-dist/halflife).
 function computeTopWall(levels, nqPrice) {
   if (!levels.length || nqPrice == null) return null;
   let best = null, bestWScore = -1;
@@ -310,11 +362,7 @@ function computeTopWall(levels, nqPrice) {
   return best;
 }
 
-// ── INTRADAY CLASSIFIER ───────────────────────────────────────────────────────
-// Inputs (new):
-//   pdfBiasTag        — bias.pdf primary bias tag (e.g. 'BULLISH_CHOP')
-//   wallReactionTag   — walls.pdf reaction tag for the top wall (e.g. 'CALL_WALL_BULLISH_GRIND')
-//   aggregateGreeks   — { gex_sign, charm_sign, vanna_sign, ... } from the level set
+// ── OPTIONS-FLOW INTRADAY CLASSIFIER (existing) ───────────────────────────────
 function classifyIntradayBias({ gammaRegime, volRegime, gammaFlip, nqPrice, topWall, hGexNorm, macroBias, entropy, pca,
                                 pdfBiasTag, wallReactionTag, aggregateGreeks }) {
   if (entropy && entropy.entropy_state === 'CRITICAL') {
@@ -335,10 +383,6 @@ function classifyIntradayBias({ gammaRegime, volRegime, gammaFlip, nqPrice, topW
 
   const macroBullish = MACRO_BULL.has(macroBias);
   const macroBearish = MACRO_BEAR.has(macroBias);
-  // Only use PC1 as a directional signal if the momentum loadings confirm
-  // it is actually a trend/momentum axis. If pc1_momentum_valid is false,
-  // PC1 is likely dominated by the vol cluster and its sign is meaningless
-  // for direction.
   const pc1Bull = pca && pca.PC1 != null && pca.pc1_momentum_valid === true && pca.PC1 > 0;
 
   let air_pocket_watch = false, air_pocket_type = null;
@@ -370,7 +414,7 @@ function classifyIntradayBias({ gammaRegime, volRegime, gammaFlip, nqPrice, topW
     } else {
       bias = 'NEUTRAL'; conf = 'LOW';
       reason = `Positive gamma regime (dealers dampen moves) but no strong wall nearby `
-             + `(top score ${topScore.toFixed(0)}). Range-bound chop likely — levels hold but offer little edge.`;
+             + `(top score ${topScore.toFixed(0)}). Range-bound chop likely.`;
     }
 
   } else if (gammaRegime === 'NEGATIVE') {
@@ -387,11 +431,10 @@ function classifyIntradayBias({ gammaRegime, volRegime, gammaFlip, nqPrice, topW
       bias = topType.toUpperCase().includes('CALL') ? 'BEARISH REVERSAL' : 'BULLISH REVERSAL';
       conf = 'MODERATE';
       reason = `NEAR_FLIP: price within ${NEAR_FLIP_BUFFER} pts of the gamma flip. `
-             + `Strong ${topType} (score ${topScore.toFixed(0)}) nearby — a flip crossing can accelerate the move.`;
+             + `Strong ${topType} (score ${topScore.toFixed(0)}) nearby.`;
     } else {
       bias = 'NEUTRAL'; conf = 'LOW';
-      reason = `NEAR_FLIP: price within ${NEAR_FLIP_BUFFER} pts of the gamma flip with no strong wall to anchor it. `
-             + `Dealer hedging is unstable here — high uncertainty.`;
+      reason = `NEAR_FLIP: price within ${NEAR_FLIP_BUFFER} pts of the gamma flip with no strong wall. High uncertainty.`;
     }
 
   } else {
@@ -399,20 +442,12 @@ function classifyIntradayBias({ gammaRegime, volRegime, gammaFlip, nqPrice, topW
     reason = `Gamma regime unknown (no flip data). Cannot classify.`;
   }
 
-  // ── CONFIDENCE: continuous score → bucket once ───────────────
-  // Each modifier contributes +1 (raises evidence) or -1 (reduces evidence)
-  // or 0 (neutral). We sum all modifiers, then map to LOW/MODERATE/HIGH.
-  // Starting evidence is set by the initial conf assignment above.
   const CONF_BASE = { 'LOW': -1, 'MODERATE': 0, 'HIGH': 1 };
   let evidence = CONF_BASE[conf] ?? 0;
 
-  // Vol × gamma regime interaction
   if (gammaRegime === 'NEGATIVE' && volRegime === 'EXPANSION') {
     reason += ` EXPANSION vol + negative gamma: dealers short and IV expanding — moves amplified.`;
-    if (macroBearish) {
-      evidence += 1;
-      reason += ` Macro confirms — all three axes bearish.`;
-    }
+    if (macroBearish) { evidence += 1; reason += ` Macro confirms — all three axes bearish.`; }
   } else if (gammaRegime === 'NEGATIVE' && volRegime === 'CONTRACTION') {
     evidence -= 1;
     reason += ` CONTRACTION vol with negative gamma is unusual — potential mean-reversion, reduce size.`;
@@ -420,87 +455,213 @@ function classifyIntradayBias({ gammaRegime, volRegime, gammaFlip, nqPrice, topW
     reason += ` CONTRACTION vol + positive gamma: maximum pinning — walls highly reliable.`;
   }
 
-  // GEX dispersion penalty
   if (hGexNorm > H_GEX_CONFIDENCE_CUT) {
     evidence -= 1;
     reason += ` GEX dispersed (H_GEX_norm ${hGexNorm.toFixed(2)} > 0.6) — no dominant wall.`;
   }
 
-  // Macro neutrality penalty
   if (!macroBullish && !macroBearish) {
     evidence -= 1;
     reason += ` Macro bias neutral (${macroBias}) — confidence penalized.`;
   }
 
-  // Entropy gate
   if (entropy && entropy.entropy_state === 'STABLE') {
     reason += ` Return entropy STABLE (H ${entropy.H_returns} < threshold ${entropy.H_threshold}) — orderly tape.`;
   } else if (!entropy || entropy.entropy_state === 'UNKNOWN') {
     reason += ` (Entropy gate unavailable.)`;
   }
 
-  // ── PDF-DERIVED EVIDENCE LAYER ────────────────────────────────
-  // Apply two additional signals on top of the existing accumulator:
-  //   1. bias.pdf "primary bias" tag from aggregate (GEX, Charm, Vanna, IV, flip).
-  //   2. walls.pdf reaction tag for the top wall.
-  // Both are converted to a {dir, strength} pair via tag-direction maps in
-  // lib/options.js. Strength-2 tags (breakdowns / squeezes) contribute more
-  // evidence than strength-1 tags (standard reactions).
-  //
-  // The current `bias` variable has already been set above; we use it to
-  // determine whether the PDF signals confirm or conflict with the call.
   const currentBull = bias.includes('BULL') && !bias.includes('BEAR');
   const currentBear = bias.includes('BEAR');
 
   const pdfDir = pdfBiasTag && BIAS_TAG_DIR[pdfBiasTag];
   if (pdfDir && pdfDir.dir !== 'NEUTRAL') {
-    const matches = (pdfDir.dir === 'BULL' && currentBull) || (pdfDir.dir === 'BEAR' && currentBear);
+    const matches   = (pdfDir.dir === 'BULL' && currentBull) || (pdfDir.dir === 'BEAR' && currentBear);
     const conflicts = (pdfDir.dir === 'BULL' && currentBear) || (pdfDir.dir === 'BEAR' && currentBull);
-    if (matches) {
-      evidence += pdfDir.strength;
-      reason += ` Aggregate bias table (${pdfBiasTag.replace(/_/g, ' ').toLowerCase()}) confirms.`;
-    } else if (conflicts) {
-      evidence -= pdfDir.strength;
-      reason += ` ⚠ Aggregate bias table (${pdfBiasTag.replace(/_/g, ' ').toLowerCase()}) conflicts with directional call.`;
-    }
+    if (matches)   { evidence += pdfDir.strength; reason += ` Aggregate bias table (${pdfBiasTag.replace(/_/g, ' ').toLowerCase()}) confirms.`; }
+    else if (conflicts) { evidence -= pdfDir.strength; reason += ` ⚠ Aggregate bias table (${pdfBiasTag.replace(/_/g, ' ').toLowerCase()}) conflicts.`; }
   }
 
   const wallDir = wallReactionTag && WALL_REACTION_DIR[wallReactionTag];
   if (wallDir && wallDir.dir !== 'NEUTRAL') {
-    const matches = (wallDir.dir === 'BULL' && currentBull) || (wallDir.dir === 'BEAR' && currentBear);
+    const matches   = (wallDir.dir === 'BULL' && currentBull) || (wallDir.dir === 'BEAR' && currentBear);
     const conflicts = (wallDir.dir === 'BULL' && currentBear) || (wallDir.dir === 'BEAR' && currentBull);
-    if (matches) {
-      evidence += wallDir.strength;
-      reason += ` Top-wall reaction (${wallReactionTag.replace(/_/g, ' ').toLowerCase()}) confirms.`;
-    } else if (conflicts) {
+    if (matches)   { evidence += wallDir.strength; reason += ` Top-wall reaction (${wallReactionTag.replace(/_/g, ' ').toLowerCase()}) confirms.`; }
+    else if (conflicts) {
       evidence -= wallDir.strength;
       reason += ` ⚠ Top-wall reaction (${wallReactionTag.replace(/_/g, ' ').toLowerCase()}) conflicts.`;
-      // walls.pdf strength-2 tags imply expansion/breakdown — flag air-pocket risk.
-      if (wallDir.strength >= 2 && !air_pocket_watch) {
-        air_pocket_watch = true;
-        air_pocket_type  = 'WALL_BREAKDOWN';
-      }
+      if (wallDir.strength >= 2 && !air_pocket_watch) { air_pocket_watch = true; air_pocket_type = 'WALL_BREAKDOWN'; }
     }
   }
 
-  // ── DIM/ERAKER/VILKOV ASYMMETRY ──────────────────────────────
-  // 2.pdf finds positive-MM-gamma vol attenuation is ~3x stronger than
-  // negative-MM-gamma vol amplification. Scale negative-gamma evidence
-  // toward zero (multiply by GAMMA_ASYMMETRY_RATIO ≈ 0.34) so that signals
-  // in the negative-gamma regime carry less confidence than equivalent
-  // signals in the positive-gamma regime.
   if (gammaRegime === 'NEGATIVE') {
     const before = evidence;
     evidence = Math.sign(evidence) * Math.abs(evidence) * GAMMA_ASYMMETRY_RATIO;
-    if (Math.abs(before) > 0.01) {
-      reason += ` (Evidence scaled by ${GAMMA_ASYMMETRY_RATIO.toFixed(2)} — Dim/Eraker/Vilkov 2025 asymmetry: negative-gamma signals are weaker than positive-gamma signals.)`;
-    }
+    if (Math.abs(before) > 0.01)
+      reason += ` (Evidence scaled by ${GAMMA_ASYMMETRY_RATIO.toFixed(2)} — Dim/Eraker/Vilkov 2025 asymmetry.)`;
   }
 
-  // Map continuous evidence score to confidence bucket (single conversion, no clamping chain)
   conf = evidence >= 1 ? 'HIGH' : evidence <= -1 ? 'LOW' : 'MODERATE';
-
   return { intraday_bias: bias, confidence: conf, air_pocket_watch, air_pocket_type, reason };
+}
+
+// ── RTH BIAS INPUTS ───────────────────────────────────────────────────────────
+// 2Y yield direction via SHY ETF (iShares 1-3Y Treasury Bond ETF).
+// Falling SHY = rising 2Y yields = bearish NQ lean.
+function classify2YSignal(bars) {
+  if (!bars || bars.length < 6) return 'UNAVAILABLE';
+  const closes = bars.map(b => b.close);
+  const latest = closes[closes.length - 1];
+  const ref5d  = closes[closes.length - 6];
+  if (!ref5d || ref5d === 0) return 'UNAVAILABLE';
+  const roc5 = (latest - ref5d) / ref5d;
+  if (roc5 < -0.003)  return 'RISING_FAST';
+  if (roc5 < -0.0008) return 'RISING';
+  if (roc5 >  0.0008) return 'FALLING';
+  return 'STABLE';
+}
+
+// BOJ/carry signal via USD/JPY daily closes.
+// Fast yen strengthening (USDJPY falling) = forced JPY repatriation = global risk-off.
+function classifyBOJSignal(bars) {
+  if (!bars || bars.length < 4) return 'UNAVAILABLE';
+  const closes = bars.map(b => b.close);
+  const latest = closes[closes.length - 1];
+  const ref3d  = closes[closes.length - 4];
+  if (!ref3d || ref3d === 0) return 'UNAVAILABLE';
+  const roc3 = (latest - ref3d) / ref3d;
+  if (roc3 < -0.015) return 'CARRY_UNWIND';
+  if (roc3 >  0.005) return 'YEN_WEAKENING';
+  return 'YEN_STABLE';
+}
+
+// Net system liquidity trend from the latest bias_output.json macro regime scores.
+function getLiquidityTrend(data) {
+  const score = data &&
+    data.macro_regime &&
+    data.macro_regime.factor_scores &&
+    data.macro_regime.factor_scores.net_liq_wow;
+  if (score == null) return 'UNAVAILABLE';
+  if (score > 0) return 'IMPROVING';
+  if (score < 0) return 'DETERIORATING';
+  return 'STABLE';
+}
+
+// COT crowding label from latest bias_output.json.
+function getCotLabel(data) {
+  const p = data && data.cot && data.cot.nq_lev_pctile;
+  if (p == null) return 'UNAVAILABLE';
+  if (p > 0.80) return 'FUMES_LONG';
+  if (p < 0.20) return 'EXTREME_SHORT';
+  return 'NEUTRAL';
+}
+
+// RTH macro bias verdict from 4 factors (yield, liquidity, COT, BOJ) plus
+// the weekly macro confluence as a tiebreaker.
+function classifyRTHBias({ yieldSignal, liquidityTrend, cotLabel, bojSignal, macroConfluence }) {
+  let bull = 0, bear = 0;
+
+  if (yieldSignal === 'FALLING')          bull += 1;
+  else if (yieldSignal === 'STABLE')      bull += 0.5;
+  else if (yieldSignal === 'RISING')      bear += 1;
+  else if (yieldSignal === 'RISING_FAST') bear += 2;
+
+  if (liquidityTrend === 'IMPROVING')      bull += 1;
+  else if (liquidityTrend === 'DETERIORATING') bear += 1;
+
+  if (cotLabel === 'EXTREME_SHORT')        bull += 1;
+  else if (cotLabel === 'FUMES_LONG')      bear += 1;
+
+  if (bojSignal === 'CARRY_UNWIND')        bear += 2;
+  else if (bojSignal === 'YEN_WEAKENING')  bull += 0.5;
+
+  if (['STRONG BULL', 'LEAN BULL'].includes(macroConfluence))       bull += 1;
+  else if (['STRONG BEAR', 'LEAN BEAR'].includes(macroConfluence))  bear += 1;
+
+  let verdict;
+  if (yieldSignal === 'UNAVAILABLE' && bojSignal === 'UNAVAILABLE') {
+    verdict = 'UNKNOWN';
+  } else if (bear >= 2.5) {
+    verdict = 'BEARISH';
+  } else if (bull >= 2.5) {
+    verdict = 'BULLISH';
+  } else {
+    verdict = 'NEUTRAL';
+  }
+
+  return {
+    verdict,
+    bull_count: Math.round(bull * 2) / 2,
+    bear_count: Math.round(bear * 2) / 2,
+  };
+}
+
+// ── OPEN ARCHETYPE SCORING ────────────────────────────────────────────────────
+// Scores all four open archetypes using GEX structure. Committed code uses
+// abstract type codes; display names/descriptions come from getConfig().
+function classifyOpenArchetype({ gammaFlip, futuresPrice, aggregateGreeks, levels, ivBand }) {
+  if (!gammaFlip || !futuresPrice || !aggregateGreeks) {
+    return { type: null, confidence: 0, dir: 'neutral', runner_up: null, runner_up_confidence: 0, signals: [] };
+  }
+
+  const flipDiff = futuresPrice - gammaFlip;
+  const { dex_sign, vex_sign, charm_sign } = aggregateGreeks;
+  const threshold = ivBand || 50;
+
+  const callWalls = (levels || []).filter(l => l.net_gex > 0 && l.dist_nq > 0)
+                                   .sort((a, b) => a.dist_nq - b.dist_nq);
+  const putWalls  = (levels || []).filter(l => l.net_gex < 0 && l.dist_nq < 0)
+                                   .sort((a, b) => b.dist_nq - a.dist_nq);
+  const callWallDist = callWalls.length ? Math.abs(callWalls[0].dist_nq) : 999;
+  const putWallDist  = putWalls.length  ? Math.abs(putWalls[0].dist_nq)  : 999;
+
+  const scores = { TYPE_A: 0, TYPE_B: 0, TYPE_C: 0, TYPE_D: 0 };
+  const sigs   = { TYPE_A: [], TYPE_B: [], TYPE_C: [], TYPE_D: [] };
+
+  // TYPE_A
+  if (flipDiff >= -threshold && flipDiff <= threshold * 0.5) { scores.TYPE_A++; sigs.TYPE_A.push('near_flip'); }
+  if (dex_sign > 0)              { scores.TYPE_A++; sigs.TYPE_A.push('dex_positive'); }
+  if (vex_sign > 0)              { scores.TYPE_A++; sigs.TYPE_A.push('call_bias'); }
+  if (putWallDist < threshold)   { scores.TYPE_A++; sigs.TYPE_A.push('put_wall_near'); }
+  if (charm_sign > 0)            { scores.TYPE_A++; sigs.TYPE_A.push('charm_positive'); }
+
+  // TYPE_B
+  if (flipDiff >= 0 && flipDiff <= threshold * 1.5) { scores.TYPE_B++; sigs.TYPE_B.push('above_flip'); }
+  if (dex_sign < 0)              { scores.TYPE_B++; sigs.TYPE_B.push('dex_negative'); }
+  if (vex_sign < 0)              { scores.TYPE_B++; sigs.TYPE_B.push('put_bias'); }
+  if (callWallDist < threshold)  { scores.TYPE_B++; sigs.TYPE_B.push('call_wall_near'); }
+  if (charm_sign < 0)            { scores.TYPE_B++; sigs.TYPE_B.push('charm_negative'); }
+
+  // TYPE_C
+  if (flipDiff > threshold)      { scores.TYPE_C++; sigs.TYPE_C.push('well_above_flip'); }
+  if (flipDiff > threshold * 2)  { scores.TYPE_C++; sigs.TYPE_C.push('extended_above'); }
+  if (dex_sign > 0)              { scores.TYPE_C++; sigs.TYPE_C.push('dex_positive'); }
+  if (vex_sign > 0)              { scores.TYPE_C++; sigs.TYPE_C.push('call_buying'); }
+  if (callWallDist > 150)        { scores.TYPE_C++; sigs.TYPE_C.push('room_to_run'); }
+
+  // TYPE_D
+  if (flipDiff < -threshold)     { scores.TYPE_D++; sigs.TYPE_D.push('well_below_flip'); }
+  if (flipDiff < -threshold * 2) { scores.TYPE_D++; sigs.TYPE_D.push('extended_below'); }
+  if (dex_sign < 0)              { scores.TYPE_D++; sigs.TYPE_D.push('dex_negative'); }
+  if (vex_sign < 0)              { scores.TYPE_D++; sigs.TYPE_D.push('put_buying'); }
+  if (putWallDist > 150)         { scores.TYPE_D++; sigs.TYPE_D.push('room_to_fall'); }
+
+  const entries = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+  const [winner, topScore] = entries[0];
+  const [second, secScore] = entries[1] || ['', 0];
+
+  // A and C are bull-resolving; B and D are bear-resolving
+  const TYPE_DIRS = { TYPE_A: 'bull', TYPE_B: 'bear', TYPE_C: 'bull', TYPE_D: 'bear' };
+
+  return {
+    type:                 topScore > 0 ? winner : null,
+    confidence:           topScore,
+    dir:                  topScore > 0 ? (TYPE_DIRS[winner] || 'neutral') : 'neutral',
+    runner_up:            secScore > 0 ? second : null,
+    runner_up_confidence: secScore,
+    all_scores:           scores,
+    signals:              topScore > 0 ? (sigs[winner] || []) : [],
+  };
 }
 
 // ── HANDLER ───────────────────────────────────────────────────────────────────
@@ -514,64 +675,50 @@ exports.handler = async (event) => {
     const cookie = process.env.FF_SESSION || '';
     const exp    = todayET();
 
-    const [data, volData, yahoo] = await Promise.all([
+    const [data, volData, yahoo, shyBars, usdjpyBars] = await Promise.all([
       fetchJson(`${BASE_URL}/futures-levels?symbol=${SYMBOL}&exp=${exp}`, cookie),
       fetchJson(`${BASE_URL}/vol/realized?symbol=${SYMBOL}`, cookie).catch(() => null),
       fetchYahooDaily().catch(() => null),
+      fetchYahooSymbol('SHY', 6).catch(() => null),
+      fetchYahooSymbol('USDJPY=X', 4).catch(() => null),
     ]);
 
     if (!data.rows || !data.rows.length) throw new Error('No rows — FF_SESSION may be expired.');
 
     const { strikes, futuresPrice, spotEtf } = aggregateDataset(data);
 
-    // Compute flip + both regime axes before scoring — weights depend on both.
-    const gammaFlip  = computeGammaFlip(strikes, futuresPrice);
-    const flipDiff   = futuresPrice != null && gammaFlip != null ? futuresPrice - gammaFlip : null;
+    const gammaFlip = computeGammaFlip(strikes, futuresPrice);
+    const flipDiff  = futuresPrice != null && gammaFlip != null ? futuresPrice - gammaFlip : null;
 
     let iv = null, rvIvRatio = null, hv21 = null;
     if (volData) {
-      iv          = volData.current_iv  ?? null;
-      rvIvRatio   = volData.rv_iv_ratio ?? null;
-      hv21        = volData.hv21        ?? null;
+      iv        = volData.current_iv  ?? null;
+      rvIvRatio = volData.rv_iv_ratio ?? null;
+      hv21      = volData.hv21        ?? null;
     }
 
-    // Vol-scaled gamma regime band: 0.5 × IV-implied daily move
-    // If IV is unavailable, fall back to fixed 50 pts.
-    // Derivation: daily_1sd = futuresPrice × (IV/100) / sqrt(252)
-    //             band = 0.5 × daily_1sd
-    // This makes NEAR_FLIP adaptive — wider when vol is high, tighter when low.
     const _ivBand = (iv != null && iv > 0 && futuresPrice != null)
       ? Math.max(30, 0.5 * futuresPrice * (iv / 100) / Math.sqrt(252))
       : 50;
-    const gammaRegime = flipDiff == null ? 'UNKNOWN'
+    const gammaRegime  = flipDiff == null ? 'UNKNOWN'
       : flipDiff >  _ivBand ? 'POSITIVE'
       : flipDiff < -_ivBand ? 'NEGATIVE'
       : 'NEAR_FLIP';
     const levelsRegime = classifyVolRegime(iv, rvIvRatio);
     const weights      = getWeights(levelsRegime, gammaRegime);
 
-    const levels      = scoreLevels(strikes, weights, futuresPrice);
+    const levels     = scoreLevels(strikes, weights, futuresPrice);
     const H_GEX_norm = computeHGEXNorm(levels);
     const topWall    = computeTopWall(levels, futuresPrice);
 
-    // ── PDF-DERIVED CLASSIFICATIONS ──────────────────────────────────────────
-    // walls.pdf reaction tag is attached per-level by scoreLevels(); pick the
-    // tag for the top wall to feed the classifier.
-    //
-    // Aggregate Greek signs feed the bias.pdf primary-bias table. We compute
-    // these on the FULL proximity-filtered set (nearbyStrikes — strikes within
-    // FILTER_PCT of price) rather than on the post-MIN_SCORE levels list,
-    // because bias.pdf rules describe overall dealer positioning, not just
-    // the scoring-worthy walls. Low-score strikes can still tilt the
-    // aggregate sign when they cluster on one side of price.
     const _nearbyAll      = nearbyStrikes(strikes, futuresPrice);
     const aggregateGreeks = computeAggregateGreeks(_nearbyAll);
     const wallReactionTag = topWall ? topWall.wall_reaction : null;
     const priceVsFlip     = flipDiff == null ? 0 : (flipDiff > 0 ? 1 : -1);
     const pdfBiasTag      = applyBiasTable(aggregateGreeks, levelsRegime, priceVsFlip);
 
-    let entropy    = { entropy_state: 'UNKNOWN', H_returns: null, H_threshold: null };
-    let pca        = { PC1: null, PC2: null, PC3: null, pca_explained: null, pca_n_samples: 0 };
+    let entropy     = { entropy_state: 'UNKNOWN', H_returns: null, H_threshold: null };
+    let pca         = { PC1: null, PC2: null, PC3: null, pca_explained: null, pca_n_samples: 0 };
     let priceSource = null;
     if (yahoo && yahoo.bars && yahoo.bars.length) {
       priceSource = yahoo.source;
@@ -581,20 +728,72 @@ exports.handler = async (event) => {
 
     let macroBias = 'UNKNOWN', macroRegime = {};
     if (macroBiasData) {
-      macroBias   = macroBiasData.confluence   || 'UNKNOWN';
-      macroRegime = macroBiasData.macro_regime || {};
+      macroBias   = macroBiasData.confluence    || 'UNKNOWN';
+      macroRegime = macroBiasData.macro_regime  || {};
     }
 
-    const result = classifyIntradayBias({
+    // Options-flow based intraday classifier (existing)
+    const optionsResult = classifyIntradayBias({
       gammaRegime, volRegime: levelsRegime, gammaFlip, nqPrice: futuresPrice,
       topWall, hGexNorm: H_GEX_norm, macroBias, entropy, pca,
       pdfBiasTag, wallReactionTag, aggregateGreeks,
     });
 
+    // RTH macro bias (new)
+    const yieldSignal    = classify2YSignal(shyBars);
+    const bojSignal      = classifyBOJSignal(usdjpyBars);
+    const liquidityTrend = getLiquidityTrend(macroBiasData);
+    const cotLabel       = getCotLabel(macroBiasData);
+    const rthResult      = classifyRTHBias({ yieldSignal, liquidityTrend, cotLabel, bojSignal, macroConfluence: macroBias });
+
+    // Open archetype scoring (new)
+    const archResult = classifyOpenArchetype({
+      gammaFlip, futuresPrice, aggregateGreeks, levels, ivBand: _ivBand,
+    });
+
+    // Enrich archetype and RTH fields with display text from methodology config
+    const cfg = getConfig();
+    const archCfg  = archResult.type ? (cfg.archetypes[archResult.type] || {}) : {};
+    const rthCfg   = cfg.rthBias[rthResult.verdict] || {};
+
     const updatedET = new Date().toLocaleString('en-US', {
       timeZone: 'America/New_York',
       hour: '2-digit', minute: '2-digit', hour12: false,
     }) + ' ET';
+
+    // Build RTH factor detail objects
+    const rthFactors = {
+      yield: {
+        signal: yieldSignal,
+        label:  (cfg.yieldSignals[yieldSignal]    || {}).label  || yieldSignal,
+        interp: (cfg.yieldSignals[yieldSignal]    || {}).interp || '',
+        cls:    (cfg.yieldSignals[yieldSignal]    || {}).cls    || 'ghost',
+      },
+      liquidity: {
+        signal: liquidityTrend,
+        label:  (cfg.liquidityLabels[liquidityTrend] || {}).label  || liquidityTrend,
+        interp: (cfg.liquidityLabels[liquidityTrend] || {}).interp || '',
+        cls:    (cfg.liquidityLabels[liquidityTrend] || {}).cls    || 'ghost',
+      },
+      cot: {
+        signal: cotLabel,
+        label:  (cfg.cotLabels[cotLabel] || {}).label  || cotLabel,
+        interp: (cfg.cotLabels[cotLabel] || {}).interp || '',
+        cls:    (cfg.cotLabels[cotLabel] || {}).cls    || 'ghost',
+        pctile: macroBiasData && macroBiasData.cot
+          ? Math.round((macroBiasData.cot.nq_lev_pctile || 0) * 100)
+          : null,
+      },
+      boj: {
+        signal: bojSignal,
+        label:  (cfg.bojSignals[bojSignal] || {}).label  || bojSignal,
+        interp: (cfg.bojSignals[bojSignal] || {}).interp || '',
+        cls:    (cfg.bojSignals[bojSignal] || {}).cls    || 'ghost',
+        usdjpy: usdjpyBars && usdjpyBars.length
+          ? Math.round(usdjpyBars[usdjpyBars.length - 1].close * 100) / 100
+          : null,
+      },
+    };
 
     return {
       statusCode: 200,
@@ -602,7 +801,7 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         updated:       updatedET,
         pred_date:     todayET(),
-        nq_price:      Math.round(futuresPrice * 10)  / 10,
+        nq_price:      Math.round(futuresPrice * 10)    / 10,
         qqq_price:     Math.round((spotEtf || 0) * 100) / 100,
         gamma_flip:    gammaFlip,
         gamma_regime:  gammaRegime,
@@ -626,11 +825,34 @@ exports.handler = async (event) => {
         mm_intensification: [],
         macro_bias:    macroBias,
         macro_regime:  macroRegime,
-        // PDF-derived methodology fields (bias.pdf + walls.pdf):
         pdf_primary_bias:   pdfBiasTag,
         wall_reaction:      wallReactionTag,
         aggregate_greeks:   aggregateGreeks,
-        ...result,
+
+        // RTH macro bias
+        rth_bias:          rthResult.verdict,
+        rth_bias_label:    rthCfg.label   || rthResult.verdict,
+        rth_bias_summary:  rthCfg.summary || '',
+        rth_bias_cls:      rthCfg.cls     || 'ghost',
+        rth_bull_count:    rthResult.bull_count,
+        rth_bear_count:    rthResult.bear_count,
+        rth_factors:       rthFactors,
+
+        // Open archetype
+        open_archetype:                    archResult.type,
+        open_archetype_confidence:         archResult.confidence,
+        open_archetype_dir:                archResult.dir,
+        open_archetype_runner_up:          archResult.runner_up,
+        open_archetype_runner_up_confidence: archResult.runner_up_confidence,
+        open_archetype_all_scores:         archResult.all_scores,
+        open_archetype_signals:            archResult.signals,
+        open_archetype_name:               archCfg.name   || archResult.type || null,
+        open_archetype_short:              archCfg.short  || archResult.type || null,
+        open_archetype_desc:               archCfg.desc   || '',
+        open_archetype_action:             archCfg.action || '',
+
+        // Options-flow classifier (secondary context)
+        ...optionsResult,
       }),
     };
 

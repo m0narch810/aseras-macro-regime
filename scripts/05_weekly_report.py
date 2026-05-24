@@ -385,6 +385,48 @@ def print_week(date, row, lv, save_list=None):
     else:
         lev_label = "NEUTRAL"
 
+    # COT extreme flag (dxrk: >80 = trend on fumes, <20 = extreme short)
+    cot_extreme       = bool(nq_pctile > 0.80 or nq_pctile < 0.20)
+    cot_extreme_label = (
+        "FUMES_LONG"    if nq_pctile > 0.80 else
+        "FUMES_SHORT"   if nq_pctile < 0.20 else
+        None
+    )
+
+    # Fed stance (derived from yield + DXY + liquidity factor scores)
+    _us10y_s  = macro_details.get("us10y_wow", 0)
+    _yc_s     = macro_details.get("yield_curve_wow", 0)
+    _liq_s    = macro_details.get("net_liq_wow", 0)
+    _dxy_s    = macro_details.get("dxy_wow", 0)
+    if _us10y_s < 0 and _yc_s < 0:
+        fed_stance = "HAWKISH"
+    elif _liq_s > 0 or (_us10y_s > 0 and _yc_s > 0):
+        fed_stance = "DOVISH"
+    else:
+        fed_stance = "NEUTRAL"
+
+    # Trend phase (COT-based)
+    if cot_extreme:
+        trend_phase = "EXHAUSTION"
+    elif nq_pctile > 0.65 and price_prob > 0.60:
+        trend_phase = "MID"
+    elif nq_pctile < 0.35 and price_prob < 0.45:
+        trend_phase = "MID_BEAR"
+    else:
+        trend_phase = "EARLY"
+
+    # Macro cluster: 3+ of 4 primary direction indicators aligned
+    _primary = [
+        macro_details.get("net_liq_wow", 0),
+        macro_details.get("vix_wow",     0),
+        macro_details.get("dxy_wow",     0),
+        macro_details.get("us10y_wow",   0),
+    ]
+    _bull_primary = sum(1 for v in _primary if v > 0)
+    _bear_primary = sum(1 for v in _primary if v < 0)
+    macro_cluster        = bool(_bull_primary >= 3 or _bear_primary >= 3)
+    macro_cluster_dir    = "BULL" if _bull_primary >= 3 else "BEAR" if _bear_primary >= 3 else None
+
     wow_note = "adding shorts" if nq_wow < 0 else "adding longs"
     am_dir   = "net long"  if es_am_net >= 0 else "net short"
     am_desc  = "institutions holding" if es_am_net >= 0 else "institutions reducing"
@@ -496,7 +538,13 @@ def print_week(date, row, lv, save_list=None):
             "es_asset_mgr_net_pct":       round(float(es_am_net), 4),
             "lev_label":                  lev_label,
             "positioning_interpretation": pos_interp,
+            "cot_extreme":                cot_extreme,
+            "cot_extreme_label":          cot_extreme_label,
         },
+        "fed_stance": fed_stance,
+        "trend_phase": trend_phase,
+        "macro_cluster": macro_cluster,
+        "macro_cluster_dir": macro_cluster_dir,
     }
     if not (isinstance(ts_ratio, float) and np.isnan(ts_ratio)):
         result["vix_term_structure"] = {

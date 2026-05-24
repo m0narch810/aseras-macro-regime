@@ -11,3 +11,10 @@ data/raw/
 data/processed/*_1m_clean.csv
 data/processed/*_5m_clean.csv
 data/processed/*_15m_clean.csv
+
+# Methodology config — private; inject via METHODOLOGY_CONFIG env var on Netlify
+netlify/functions/lib/methodology_config.js
+scripts/methodology_config.py
+
+# Source PDFs — private dxrk methodology and research materials
+clauderesources/
