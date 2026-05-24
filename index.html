@@ -1851,7 +1851,7 @@ function renderIntraday(d) {
     borderTop:"1px solid rgba(255,255,255,0.06)",
     display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"10px"}});
   updRow.appendChild(el("div", {style:{fontSize:"9px",color:"var(--ghost)"}},
-    "Updated " + (d.updated || "—") + "  ·  " + (d.pred_date || "")));
+    "Updated " + (d.updated || "—") + "  ·  " + (d.pred_date || "") + (d.expiry_dte > 0 ? "  (" + d.expiry_dte + "DTE)" : "")));
   app.appendChild(archHero);
 
   // ── RTH MACRO BIAS ──────────────────────────────

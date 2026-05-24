@@ -677,6 +677,26 @@ function classifyOpenArchetype({ gammaFlip, futuresPrice, aggregateGreeks, level
   };
 }
 
+// ── EXPIRY FALLBACK (0DTE → 1DTE → 2DTE) ────────────────────────────────────
+function addDays(dateStr, n) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  date.setUTCDate(date.getUTCDate() + n);
+  return date.toISOString().slice(0, 10);
+}
+
+async function fetchExpiry(cookie, symbol) {
+  const today = todayET();
+  for (let dte = 0; dte <= 2; dte++) {
+    const exp = dte === 0 ? today : addDays(today, dte);
+    try {
+      const data = await fetchJson(`${BASE_URL}/futures-levels?symbol=${symbol}&exp=${exp}`, cookie);
+      if (data.rows && data.rows.length) return { data, exp, dte };
+    } catch (_) {}
+  }
+  throw new Error('No options data for 0DTE, 1DTE, or 2DTE — FF_SESSION may be expired.');
+}
+
 // ── HANDLER ───────────────────────────────────────────────────────────────────
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS')
@@ -686,18 +706,15 @@ exports.handler = async (event) => {
 
   try {
     const cookie = process.env.FF_SESSION || '';
-    const exp    = todayET();
 
-    const [data, volData, yahoo, shyBars, usdjpyBars, macroBiasData] = await Promise.all([
-      fetchJson(`${BASE_URL}/futures-levels?symbol=${SYMBOL}&exp=${exp}`, cookie),
+    const [{ data, exp: activeExp, dte: activeDTE }, volData, yahoo, shyBars, usdjpyBars, macroBiasData] = await Promise.all([
+      fetchExpiry(cookie, SYMBOL),
       fetchJson(`${BASE_URL}/vol/realized?symbol=${SYMBOL}`, cookie).catch(() => null),
       fetchYahooDaily().catch(() => null),
       fetchYahooSymbol('SHY', 6).catch(() => null),
       fetchYahooSymbol('USDJPY=X', 4).catch(() => null),
       getMacroBiasData(),
     ]);
-
-    if (!data.rows || !data.rows.length) throw new Error('No rows — FF_SESSION may be expired.');
 
     const { strikes, futuresPrice, spotEtf } = aggregateDataset(data);
 
@@ -814,7 +831,8 @@ exports.handler = async (event) => {
       headers:    OUT_HEADERS,
       body: JSON.stringify({
         updated:       updatedET,
-        pred_date:     todayET(),
+        pred_date:     activeExp,
+        expiry_dte:    activeDTE,
         nq_price:      Math.round(futuresPrice * 10)    / 10,
         qqq_price:     Math.round((spotEtf || 0) * 100) / 100,
         gamma_flip:    gammaFlip,
