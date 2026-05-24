@@ -53,7 +53,9 @@ function getConfig() {
     } catch (_) {}
   }
   try {
-    _methodologyConfig = require('./lib/methodology_config');
+    // String concat defeats esbuild static analysis — file is gitignored so
+    // a literal require() path would fail the Netlify build.
+    _methodologyConfig = require('./lib/' + 'methodology_config');
     return _methodologyConfig;
   } catch (_) {}
   _methodologyConfig = _emptyConfig();
