@@ -1287,7 +1287,8 @@ const APPROACH_THRESHOLD  = 40;
 const MIN_TARGET_DISTANCE = 80;
 
 // Pick the nearest strong wall to current price and the best opposing reversal
-// target on the other side of price (≥ MIN_TARGET_DISTANCE away).
+// target on the other side of price (≥ MIN_TARGET_DISTANCE NQ pts away).
+// Proximity logic stays in NQ pts (thresholds are NQ-calibrated); display uses QQQ.
 function buildLevelAlert(levels, nqPrice) {
   if (!levels || !levels.length || nqPrice == null) return null;
 
@@ -1328,7 +1329,7 @@ function buildLevelAlert(levels, nqPrice) {
   };
 }
 
-function renderLevelAlert(alert) {
+function renderLevelAlert(alert, qqqPrice) {
   if (!alert) return null;
   const sideCls = alert.above ? "bear-side" : "bull-side";
   const box = el("div", {className: "lvl-alert " + sideCls});
@@ -1341,10 +1342,13 @@ function renderLevelAlert(alert) {
     r.appendChild(el("span", {style:{color: aColor, fontWeight:"700"}}, arrow + " "));
     r.appendChild(el("span", {className: "lvl-alert-main"},
       String(level.type || "WALL") + "  @  " +
-      (level.strike_futures != null ? level.strike_futures.toFixed(1) : "—")
+      (level.strike_etf != null ? "$" + level.strike_etf.toFixed(2) : "—")
     ));
+    const distQQQ = (level.strike_etf != null && qqqPrice != null)
+      ? Math.abs(level.strike_etf - qqqPrice).toFixed(2)
+      : null;
     r.appendChild(el("span", {className: "lvl-alert-meta"},
-      Math.abs(level.dist_nq).toFixed(0) + " pts " + (distAbove ? "above" : "below") +
+      (distQQQ != null ? "$" + distQQQ + " " : "") + (distAbove ? "above" : "below") +
       " · score " + (level.score != null ? level.score.toFixed(0) : "—")
     ));
     return r;
@@ -1549,7 +1553,7 @@ function renderLevels(d) {
   refreshBar.appendChild(el("div", {id:"levels-refresh-countdown", className:"refresh-countdown"}, ""));
   app.appendChild(refreshBar);
 
-  const alertNode = renderLevelAlert(buildLevelAlert(levels, d.nq_price));
+  const alertNode = renderLevelAlert(buildLevelAlert(levels, d.nq_price), d.qqq_price);
   if (alertNode) app.appendChild(alertNode);
 
   // ── SUPPORT / RESISTANCE PANELS ──
