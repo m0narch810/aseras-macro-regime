@@ -924,6 +924,17 @@ footer .alph { color: rgba(255,255,255,0.55); }
   background: rgba(255,255,255,0.025);
   font-size: 11px;
 }
+.vol-warn {
+  display: flex; align-items: center; gap: 10px;
+  margin: 10px 0 4px; padding: 9px 13px;
+  border-radius: 6px; border-left: 3px solid var(--bear);
+  background: rgba(239,68,68,0.08);
+  font-size: 11px; color: var(--text);
+}
+.vol-warn-icon { color: var(--bear); font-weight: 700; flex-shrink: 0; }
+.vol-warn-body { display: flex; flex-direction: column; gap: 2px; }
+.vol-warn-title { font-weight: 700; color: var(--bear); letter-spacing: 0.04em; }
+.vol-warn-sub { font-size: 10px; color: var(--muted); }
 .lvl-alert.bull-side { border-left-color: var(--bull); }
 .lvl-alert.bear-side { border-left-color: var(--bear); }
 .lvl-alert-row {
@@ -1275,7 +1286,7 @@ function typeTagClass(net_gex) {
 }
 
 // ── LEVELS SORT STATE ─────────────────────────────
-const lvlSort = { col: "score", dir: "desc" };
+const lvlSort = { col: "hold_prob", dir: "desc" };
 let _lvlData = null;
 
 // ── LEVELS ALERT THRESHOLDS ───────────────────────
@@ -1347,9 +1358,10 @@ function renderLevelAlert(alert, qqqPrice) {
     const distQQQ = (level.strike_etf != null && qqqPrice != null)
       ? Math.abs(level.strike_etf - qqqPrice).toFixed(2)
       : null;
+    var alertHoldPct = level.hold_prob != null ? Math.round(level.hold_prob * 100) + "% hold" : "score " + (level.score != null ? level.score.toFixed(0) : "—");
     r.appendChild(el("span", {className: "lvl-alert-meta"},
       (distQQQ != null ? "$" + distQQQ + " " : "") + (distAbove ? "above" : "below") +
-      " · score " + (level.score != null ? level.score.toFixed(0) : "—")
+      " · " + alertHoldPct
     ));
     return r;
   }
@@ -1384,6 +1396,14 @@ function makeLvlRow(lvl) {
   tr.appendChild(el("td", {style:{color:"var(--accent)",fontWeight:"500"}},
     lvl.score != null ? lvl.score.toFixed(1) : "—"));
 
+  var holdPct = lvl.hold_prob != null ? Math.round(lvl.hold_prob * 100) : null;
+  var holdColor = holdPct == null ? "var(--muted)"
+    : holdPct >= 55 ? "var(--bull)"
+    : holdPct >= 40 ? "var(--muted)"
+    : "var(--bear)";
+  tr.appendChild(el("td", {style:{color:holdColor, fontWeight:"500"}},
+    holdPct != null ? holdPct + "%" : "—"));
+
   const ttd = el("td");
   ttd.appendChild(el("span", {className:"type-tag " + typeTagClass(lvl.net_gex)},
     String(lvl.type || "—")));
@@ -1402,6 +1422,7 @@ const LVL_COLS = [
   {key:"strike_etf",     lbl:"QQQ"},
   {key:"dist_nq",        lbl:"Dist"},
   {key:"score",          lbl:"Score"},
+  {key:"hold_prob",      lbl:"Hold %"},
   {key:"type",           lbl:"Type"},
   {key:"net_gex",        lbl:"GEX"},
   {key:"net_vex",        lbl:"Vanna"},
@@ -1520,6 +1541,19 @@ function renderLevels(d) {
 
   app.appendChild(hdr);
 
+  // ── HIGH-VOL WARNING BANNER ──
+  if (d.vol_regime === "EXPANSION") {
+    const warn = el("div", {className: "vol-warn"});
+    const icon = el("span", {className: "vol-warn-icon"}, "!");
+    const body = el("div", {className: "vol-warn-body"});
+    body.appendChild(el("div", {className: "vol-warn-title"}, "HIGH VOL — Wall reliability degraded"));
+    body.appendChild(el("div", {className: "vol-warn-sub"},
+      "IV expansion detected. Historically 28% hold rate vs 51% in low vol. Treat levels as soft zones, not hard stops."));
+    warn.appendChild(icon);
+    warn.appendChild(body);
+    app.appendChild(warn);
+  }
+
   // ── DTE PICKER ──
   const dtePicker = el("div", {style:{
     display:"flex", alignItems:"center", gap:"6px",
@@ -1558,9 +1592,9 @@ function renderLevels(d) {
 
   // ── SUPPORT / RESISTANCE PANELS ──
   const support    = levels.filter(function(l) { return l.net_gex <= 0; })
-                           .sort(function(a, b) { return b.score - a.score; });
+                           .sort(function(a, b) { return (b.hold_prob || 0) - (a.hold_prob || 0); });
   const resistance = levels.filter(function(l) { return l.net_gex > 0; })
-                           .sort(function(a, b) { return b.score - a.score; });
+                           .sort(function(a, b) { return (b.hold_prob || 0) - (a.hold_prob || 0); });
 
   app.appendChild(secLbl("Gamma Panels"));
   const panels = el("div", {style:{display:"flex",flexDirection:"column",gap:"10px"}});

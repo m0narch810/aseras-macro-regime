@@ -126,6 +126,117 @@ function todayET() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 }
 
+function currentHourET() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hour12: false,
+  }).formatToParts(new Date());
+  const h = parseInt(parts.find(p => p.type === 'hour').value,   10);
+  const m = parseInt(parts.find(p => p.type === 'minute').value, 10);
+  return h + m / 60;
+}
+
+// ── HOLD PROBABILITY MODEL ────────────────────────────────────────────────────
+// Logistic regression fitted on 489,396 intraday touch events from 2,897
+// intraday snapshots across 224 trading days (Feb-Dec 2025).
+// CV AUC 0.6166 ± 0.0007 vs current composite score AUC 0.531.
+// XGBoost CV AUC 0.7815 ± 0.0009 (not portable to JS; LR used for inference).
+// Coefficients from models/wall_score_intraday.json — do not hand-tune.
+//
+// Features unavailable at request time (approach_vel, from_below) default to
+// their training-set means, zeroing out their standardised contribution.
+const _LR = {
+  intercept: -0.002900,
+  coef: {
+    gex_norm:          0.001755,
+    vex_norm:          0.041784,
+    charmex_norm:      0.081388,
+    oi_norm:          -0.030934,
+    vex_over_gex:     -0.018243,
+    charmex_over_gex:  0.014587,
+    dist_pct:          0.054072,
+    is_high_vol:      -0.199050,
+    is_contraction:    0.006214,
+    is_put:            0.153162,
+    in_neg_gamma:     -0.034041,
+    wall_above_flip:  -0.003544,
+    confluence:        0.064043,
+    time_of_day:       0.280621,
+  },
+  mean: {
+    gex_norm:          78.899807,
+    vex_norm:          67.226002,
+    charmex_norm:      29.932098,
+    oi_norm:           25.150656,
+    vex_over_gex:       0.000312,
+    charmex_over_gex:   0.521312,
+    dist_pct:          -0.028892,
+    is_high_vol:        0.766870,
+    is_contraction:     0.055088,
+    is_put:             0.782407,
+    in_neg_gamma:       0.005439,
+    wall_above_flip:    0.998627,
+    confluence:         0.275176,
+    time_of_day:       12.530856,
+  },
+  scale: {
+    gex_norm:          28.981598,
+    vex_norm:          31.028463,
+    charmex_norm:      31.295004,
+    oi_norm:           22.303241,
+    vex_over_gex:       0.000487,
+    charmex_over_gex:   3.334451,
+    dist_pct:           0.126915,
+    is_high_vol:        0.422824,
+    is_contraction:     0.228153,
+    is_put:             0.412609,
+    in_neg_gamma:       0.073551,
+    wall_above_flip:    0.037030,
+    confluence:         0.446603,
+    time_of_day:        1.700616,
+  },
+};
+
+// gammaFlip and futuresPrice are optional; when provided, enables in_neg_gamma
+// and wall_above_flip features which meaningfully improve the prediction.
+function computeHoldProb(level, volRegime, timeOfDayET, gammaFlip, futuresPrice) {
+  const isPut   = (level.net_gex || 0) < 0;
+  const absGex  = Math.abs(level.net_gex || 0) + 1e-9;
+  const distPct = level.dist_nq != null && (level.strike_futures || futuresPrice)
+    ? level.dist_nq / (level.strike_futures || futuresPrice) * 100
+    : 0;
+
+  const raw = {
+    gex_norm:         Math.abs(level.gex_norm      || 0),
+    vex_norm:         Math.abs(level.vex_norm      || 0),
+    charmex_norm:     Math.abs(level.charmex_norm  || 0),
+    oi_norm:          Math.abs(level.oi_norm       || 0),
+    // vex_over_gex and charmex_over_gex were computed from OPRA data which has
+    // a different unit scale than FreeFlow live data. Default to training means
+    // (zero standardised contribution) to avoid blowing up the sigmoid.
+    vex_over_gex:     _LR.mean.vex_over_gex,
+    charmex_over_gex: _LR.mean.charmex_over_gex,
+    dist_pct:         distPct,
+    is_high_vol:      volRegime === 'EXPANSION'    ? 1 : 0,
+    is_contraction:   volRegime === 'CONTRACTION' ? 1 : 0,
+    is_put:           isPut ? 1 : 0,
+    in_neg_gamma:     (gammaFlip != null && futuresPrice != null)
+                        ? (futuresPrice < gammaFlip ? 1 : 0)
+                        : _LR.mean.in_neg_gamma,
+    wall_above_flip:  (gammaFlip != null && level.strike_futures != null)
+                        ? (level.strike_futures > gammaFlip ? 1 : 0)
+                        : _LR.mean.wall_above_flip,
+    // Multi-Greek confluence: 1 when GEX+VEX+CharmEX all exceed threshold
+    confluence:       (level.confluence != null) ? level.confluence : _LR.mean.confluence,
+    time_of_day:      timeOfDayET || 12.38,
+  };
+
+  let z = _LR.intercept;
+  for (const [feat, coef] of Object.entries(_LR.coef)) {
+    z += coef * (raw[feat] - _LR.mean[feat]) / _LR.scale[feat];
+  }
+  return Math.round(1 / (1 + Math.exp(-z)) * 1000) / 1000;
+}
+
 // ── OPTIONS FLOW CORE ────────────────────────────────────────────────────────
 
 // Aggregates per-row FreeFlow data into per-strike buckets.
@@ -207,7 +318,8 @@ function nearbyStrikes(strikes, futuresPrice) {
 
 // Scores nearby strikes using regime-adjusted weights. Returns strikes above
 // MIN_SCORE sorted descending. Only strikes within FILTER_PCT of futures price.
-function scoreLevels(strikes, weights, futuresPrice) {
+// volRegime and gammaFlip are passed through to computeHoldProb.
+function scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip) {
   const nearby = nearbyStrikes(strikes, futuresPrice);
   if (!nearby.length) return [];
 
@@ -217,19 +329,31 @@ function scoreLevels(strikes, weights, futuresPrice) {
   const oiN  = normalizeAbs(nearby.map(r => r.total_oi));
   const dagN = normalizeAbs(nearby.map(r => r.net_dag));
 
+  const timeET = currentHourET();
+
   return nearby
     .map((r, i) => {
       const score   = (gexN[i]*weights.gex + vexN[i]*weights.vex + chmN[i]*weights.charmex +
                        oiN[i]*weights.oi   + dagN[i]*weights.dag) * 100;
       const volSens = Math.abs(r.net_vex) / (Math.abs(r.net_gex) + 1e-9);
       const base    = r.net_gex > 0 ? 'CALL WALL' : 'PUT WALL';
-      // Reaction tag from this strike's Greek signs (private table).
       const wall_reaction = classifyWallReaction(r);
+      // Attach normalised Greek fields so computeHoldProb can read them.
+      const levelWithNorm = {
+        ...r,
+        gex_norm:     gexN[i]  * 100,
+        vex_norm:     vexN[i]  * 100,
+        charmex_norm: chmN[i]  * 100,
+        oi_norm:      oiN[i]   * 100,
+        strike_futures: r.strike_futures,
+      };
+      const hold_prob = computeHoldProb(levelWithNorm, volRegime, timeET, gammaFlip, futuresPrice);
       return {
         strike_futures: Math.round(r.strike_futures * 10)  / 10,
         strike_etf:     Math.round(r.strike_etf     * 100) / 100,
         dist_nq:        Math.round(r.dist_nq        * 10)  / 10,
         score:          Math.round(score            * 10)  / 10,
+        hold_prob,
         type:           base + (volSens > 2.0 ? ' + VOL SENSITIVE' : ''),
         net_gex:        Math.round(r.net_gex),
         net_vex:        Math.round(r.net_vex),
@@ -380,7 +504,7 @@ const PINNING_REGIME_ACTIVE = false;
 module.exports = {
   FILTER_PCT, MIN_SCORE, VALID_USERS, SESSION_MAX_AGE_MS,
   REGIME_WEIGHTS, AGENT_HEADERS, BASE_HEADERS,
-  isAuthorized, fetchJson, httpGetJson, todayET,
+  isAuthorized, fetchJson, httpGetJson, todayET, currentHourET, computeHoldProb,
   aggregateDataset, computeGammaFlip, normalizeAbs,
   nearbyStrikes, scoreLevels,
   classifyVolRegime, getWeights,

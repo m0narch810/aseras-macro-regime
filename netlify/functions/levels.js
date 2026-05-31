@@ -80,7 +80,7 @@ exports.handler = async (event) => {
 
     const volRegime = classifyVolRegime(iv, rvIvRatio);
     const weights   = getWeights(volRegime, gammaRegime);
-    const levels    = scoreLevels(strikes, weights, futuresPrice);
+    const levels    = scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip);
 
     const updatedET = new Date().toLocaleString('en-US', {
       timeZone: 'America/New_York',
