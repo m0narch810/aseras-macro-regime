@@ -25,7 +25,7 @@ data, math, and surface in the dashboard.
 │  LAYER 3 — LEVELS SCORING (live, every ~5 min)                          │
 │  netlify/functions/levels.js (handler) + lib/options.js (math)          │
 │  Per-strike GEX/VEX/CharmEX/DAG/OI scoring, vol×gamma regime weights    │
-│  hold_prob: data-driven wall reliability (489K OPRA touch events)       │
+│  hold_prob: data-driven wall reliability (511K touch events, multi-regime) │
 │  Surface: dashboard #levels tab, /.netlify/functions/levels             │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -37,7 +37,7 @@ data, math, and surface in the dashboard.
 | 1 — Macro weekly | 10/13 = 76.9% (Feb-May 2026) | Significant vs 50% random (p=0.026); NOT significant vs 56.2% bull base rate (p=0.067) | Borderline; n=13 too small |
 | 2 — Intraday | Untested on outcomes | Theory-grounded (gamma regime: Dim 2025; entropy gate: regime-switching lit) | No — needs ≥30 days of labeled snapshots |
 | 3 — Levels score | Composite score AUC 0.53 (near-random) | Arbitrary regime-weight table, empirically unvalidated | No |
-| 3 — hold_prob | LR CV AUC 0.617 ± 0.001; XGBoost CV AUC 0.782 ± 0.001 | 489K OPRA touch events, Feb-Dec 2025 0DTE QQQ | Directional signal; single-regime (2025 bull) |
+| 3 — hold_prob | LR CV AUC 0.649 ± 0.002; XGBoost CV AUC 0.830 ± 0.002 | 511K touch events: QQQ 2025 + SPY 2020-2022 (4 regimes) | Directional signal; validated across bull/bear/high-vol |
 
 ---
 
@@ -55,9 +55,14 @@ data, math, and surface in the dashboard.
 | Look at intraday backtest | `scripts/09_intraday_bias.py` + `scripts/10_validate_intraday.py` |
 | Add a new macro feature | `scripts/02_macro_features.py` (data) + `04_train_model.py` (model) + `05_weekly_report.py` (live) |
 | Rebuild 0DTE OPRA profiles + snapshots | `scripts/batch_decode_opra.py` |
-| Retrain hold_prob model | `scripts/label_intraday_touches.py` → `scripts/fit_intraday_wall_model.py` |
+| Retrain hold_prob (QQQ only) | `scripts/label_intraday_touches.py` → `scripts/fit_intraday_wall_model.py` |
+| Retrain hold_prob (QQQ + SPY combined) | above + SPY pipeline → `fit_intraday_wall_model.py --combined` |
+| Rebuild SPY 2020-2022 GEX profiles | `scripts/decode_spy_eod.py` |
+| Label SPY touch events | `scripts/label_spy_touches.py` |
 | Validate wall scoring against outcomes | `scripts/calibration_summary.py` |
 | Run reversal trade parameter search | `scripts/reversal_backtest.py` |
+| Run limit-order simulation | `scripts/limit_order_backtest.py` |
+| VP utilities (POC, VAH/VAL, HVN, LVN) | `scripts/compute_volume_profile.py` |
 
 ---
 
@@ -87,7 +92,8 @@ update both `.env` and the GitHub repo secret `FF_SESSION`.
 ```bash
 python scripts/05_weekly_report.py --live    # writes bias_output.json
 ```
-Auto-runs every Friday 10 PM UTC via GitHub Actions.
+Auto-runs Mon-Fri 9 AM ET (pre-market refresh) AND Friday 10 PM UTC (full COT update) via GitHub Actions.
+On Windows, prefix with `$env:PYTHONIOENCODING="utf-8";` to avoid cp1252 Unicode errors.
 
 **Historical blind predictions + accuracy log:**
 ```bash
@@ -110,9 +116,16 @@ python schedule_freeflow_logger.py --once    # one tick (ET-aware no-op outside 
 **Rebuild OPRA 0DTE pipeline from scratch:**
 ```bash
 python scripts/batch_decode_opra.py --workers 4          # generates gex_snapshots_0dte/ + gex_profiles_0dte/
-python scripts/label_intraday_touches.py                  # builds intraday_touches.csv (~489K events)
-python scripts/fit_intraday_wall_model.py                 # trains LR + XGBoost, saves models/wall_score_intraday.json
+python scripts/label_intraday_touches.py                  # builds intraday_touches.csv (~489K events, includes VP features)
+python scripts/fit_intraday_wall_model.py                 # QQQ-only model
+python scripts/fit_intraday_wall_model.py --combined      # QQQ + SPY combined (requires spy_touches.csv)
 # Then manually update _LR coefficients in netlify/functions/lib/options.js from the JSON
+```
+
+**Rebuild SPY 2020-2022 pipeline:**
+```bash
+python scripts/decode_spy_eod.py             # SPY EOD options → gex_profiles_spy/ (756 days)
+python scripts/label_spy_touches.py          # ES 1m touch labeling → spy_touches.csv (~22K events)
 ```
 
 ---
@@ -208,14 +221,14 @@ Each component min-max normalized across nearby strikes. Weights come from a 3×
 indexed by (volRegime, gammaRegime). **This score has AUC 0.53 — near-random. Use `hold_prob` instead.**
 
 **`hold_prob`** — data-driven wall reliability, attached to every scored level:
-- Logistic regression on 489K intraday 0DTE touch events (Feb-Dec 2025 OPRA CBBO-1m)
-- CV AUC 0.617 ± 0.001; XGBoost CV AUC 0.782 ± 0.001
-- Top features by importance: `time_of_day`, `is_high_vol`, `confluence`, `is_put`, `charmex_norm`
+- Logistic regression on 511K touch events: QQQ 0DTE OPRA (Feb-Dec 2025) + SPY EOD (Jan 2020-Dec 2022)
+- LR CV AUC 0.649 ± 0.002; XGBoost CV AUC 0.830 ± 0.002 (not portable to JS)
+- Top features: `is_contraction` (#1 XGBoost), `is_high_vol`, `time_of_day`, `confluence`, `from_below`
 - Coefficients in `models/wall_score_intraday.json` — hardcoded in `_LR` object in `lib/options.js`
-- To retrain: run OPRA pipeline (see Running the System), then update `_LR` manually from the JSON
-- **`vex_over_gex` and `charmex_over_gex` default to training means** in production because
-  FreeFlow data has a different unit scale than the OPRA training data — do not reintroduce
-  live computation of these two features
+- `_LR` has 27 features; features unavailable at inference time default to training means (zero contribution):
+  `vex_over_gex`, `charmex_over_gex` (unit scale mismatch), `approach_vel`, `from_below` (touch-time only),
+  all `pd_*` / `pw_*` volume profile features (require historical NQ 1m bars not available in function)
+- To retrain: run OPRA + SPY pipelines, then `fit_intraday_wall_model.py --combined`, then copy `_LR` from JSON
 
 **`confluence`** — 1 when GEX_norm + VEX_norm + CharmEX_norm all ≥ 40 at the same strike.
 These are the highest-quality walls; `hold_prob` is meaningfully higher on confluence=1 walls.
@@ -248,11 +261,15 @@ Source files live in `dataidk/` (gitignored — too large to commit).
 | `decode_opra_day.py` | Decode one OPRA day → 0DTE GEX profile + 13 intraday snapshots |
 | `batch_decode_opra.py` | Parallel batch across all days → `gex_snapshots_0dte/` + `gex_profiles_0dte/` |
 | `label_wall_outcomes.py` | Daily OHLC-based wall hold/break labeling (coarse, used for calibration_summary) |
-| `label_intraday_touches.py` | Minute-by-minute touch detection using nearest prior snapshot → `intraday_touches.csv` |
-| `fit_intraday_wall_model.py` | Train LR + XGBoost on touch events → `models/wall_score_intraday.json` |
+| `label_intraday_touches.py` | Minute-by-minute touch detection using nearest prior snapshot → `intraday_touches.csv` (includes VP features) |
+| `fit_intraday_wall_model.py` | Train LR + XGBoost on touch events → `models/wall_score_intraday.json`; `--combined` merges QQQ + SPY |
 | `fit_wall_score_model.py` | Validates composite score vs outcomes (shows AUC 0.53 = near-random) |
 | `calibration_summary.py` | Statistical report on wall hold rates by regime/type/threshold |
 | `reversal_backtest.py` | Vectorized parameter search: stop/target/filter combos → `reversal_backtest.csv` |
+| `compute_volume_profile.py` | VP utilities: `build_vp()`, `get_poc_vah_val()`, `get_hvns()`, `get_lvns()`, `build_vp_cache()`, `build_week_vp_cache()` |
+| `decode_spy_eod.py` | SPY EOD options chain (OptionsDX format) → per-day ES GEX profiles in `gex_profiles_spy/` |
+| `label_spy_touches.py` | ES 1m touch labeling from SPY GEX profiles → `spy_touches.csv` |
+| `limit_order_backtest.py` | Pre-loaded limit-order simulation: identifies qualifying walls per snapshot, simulates fills and outcomes |
 
 **Key design facts:**
 - OPRA CBBO-1m provides bid/ask quotes, not true OI. Quote size (bid_sz + ask_sz) is used as
@@ -263,6 +280,15 @@ Source files live in `dataidk/` (gitignored — too large to commit).
   NQ 1-minute bars from `data/processed/NQ_1m_clean.csv`.
 - The `vex_over_gex` ratio has mean ≈ 0.0003 in OPRA data (tiny vega relative to gamma at 0DTE).
   FreeFlow live data has vex/gex ≈ 0.2+. Do not use live ratio features in `computeHoldProb`.
+
+**SPY EOD pipeline facts (`decode_spy_eod.py` + `label_spy_touches.py`):**
+- Source: `archive (2)/spy_2020_2022.csv` — OptionsDX/CBOE format, brackets in column names (`[QUOTE_DATE]`)
+  that must be stripped. Parse with `pd.to_numeric(..., errors='coerce')` — columns arrive as strings.
+- Uses EOD snapshot (4pm) as next trading day's opening wall map. DTE==0 preferred; DTE==1 fallback.
+- SPY→ES conversion: ES 9:31 AM open / SPY UNDERLYING_LAST, computed daily from `data/raw/ES/1Min_ES.csv`.
+- ES 1m file is semicolon-separated, European numbers: read with `sep=";", thousands=".", decimal=","`.
+- VP features are zeroed in `spy_touches.csv` — only QQQ OPRA data has intraday snapshots for VP computation.
+- `label_spy_touches.py` uses prior-day profile as wall map, not same-day snapshots.
 
 **Backtest findings (Feb-Dec 2025 0DTE QQQ, using NQ 1m for forward P&L):**
 - Best setup at 100 NQ pt target: 71% win rate, 4:1 RR, N=17 — requires confluence + midday
@@ -322,6 +348,10 @@ framework, no template strings.
 - `Hold %` column color-coded: green ≥55%, amber 40-54%, red <40%
 - HIGH VOL banner appears when `vol_regime === "EXPANSION"` (walls hold only 28% historically)
 - Alert panel (Watching/Target) shows `XX% hold` instead of raw score
+- Watching panel shows a confirmation hint below the level rows:
+  - `confluence=1` → green "Multi-Greek confluence ✓"
+  - `confluence=0, hold_prob ≥ 0.55` → muted "Single-Greek lead — LVN or OTE adds conviction"
+  - `confluence=0, hold_prob < 0.55` → red "Greeks partial — look for LVN or OTE entry confirmation"
 
 **Auth**: `login.html` + `auth.js` gate the dashboard. Token is base64-encoded `{user, ts}` in
 `localStorage` as `vanta_session`. Not server-signed — adequate for small trusted user base only.
@@ -340,8 +370,11 @@ data/processed/
   model_dataset_enriched.csv ← rolling-window percentile context for live regime scoring
   gex_profiles_0dte/         ← opening 0DTE GEX profile per day (from batch_decode_opra.py)
   gex_snapshots_0dte/        ← 13 intraday snapshots per day; gex_snapshot_YYYYMMDD_HHMM.csv
-  intraday_touches.csv       ← 489K labeled touch events from gex_snapshots_0dte + NQ_1m
-  reversal_backtest.csv      ← output of reversal_backtest.py parameter search
+  gex_profiles_spy/          ← SPY EOD GEX profiles (from decode_spy_eod.py); 756 days 2020-2022
+  intraday_touches.csv       ← ~489K labeled QQQ touch events (gitignored — >100MB)
+  spy_touches.csv            ← ~22K labeled SPY/ES touch events (gitignored)
+  reversal_backtest.csv      ← output of reversal_backtest.py (gitignored)
+  limit_order_backtest.csv   ← output of limit_order_backtest.py (gitignored)
   wall_outcomes.csv          ← daily OHLC-based wall outcomes (coarser than intraday_touches)
   weekly_accuracy_log.csv    ← cumulative O→C labeled track record
 models/
@@ -349,12 +382,15 @@ models/
   wall_score_intraday.json         ← hold_prob LR coefficients + scaler params (source of truth)
   wall_score_intraday.pkl          ← trained LR + XGBoost objects (Python only)
 dataidk/                     ← raw OPRA CBBO-1m .dbn.zst files (gitignored, large)
+archive (2)/                 ← spy_2020_2022.csv — SPY EOD options chain 2020-2022 (gitignored, 1.28GB)
 logs/                        ← levels_YYYY-MM-DD.csv snapshots (gex-snapshots branch)
 bias_output.json             ← Layer 1 live output (bundled at build time)
 ```
 
-**`bias_output.json`** auto-updated by `.github/workflows/weekly-macro-update.yml` every Friday
-at 10 PM UTC. Requires `FRED_API_KEY` repo secret.
+**`bias_output.json`** auto-updated by `.github/workflows/weekly-macro-update.yml`:
+- Mon-Fri 9 AM ET (pre-market VIX/DXY/yield refresh)
+- Friday 10 PM UTC (full COT + weekly model run)
+Requires `FRED_API_KEY` repo secret.
 
 **`gex-snapshots` branch** holds accumulated level/snapshot CSVs. Populated by
 `.github/workflows/gex-snapshot.yml` every 15 min during 03:00-17:00 ET, Mon-Fri. Requires
@@ -365,12 +401,21 @@ at 10 PM UTC. Requires `FRED_API_KEY` repo secret.
 ## Edge & Calibration Status
 
 **Empirically validated:**
-- `hold_prob` model: LR CV AUC 0.617, XGBoost CV AUC 0.782 on 489K 0DTE touch events
-- Strongest signals: time_of_day (afternoon walls hold 56% vs open 39%), is_high_vol, confluence
-- PUT walls outperform CALL walls in bull-year data (50% vs 43% intraday hold rate)
+- `hold_prob` model: LR CV AUC 0.649, XGBoost CV AUC 0.830 on 511K events (QQQ 2025 + SPY 2020-2022)
+- Multi-regime validated: 2020 COVID crash, 2021 bull, 2022 bear, 2025 bull
+- Strongest signals: `is_contraction` (#1 XGBoost), `is_high_vol`, `time_of_day`, `confluence`
+- CONTRACTION vol: 67.8% hold rate; EXPANSION: 46.8%; NEUTRAL: 54.9%
+- Time-of-day: afternoon (14-16 ET) 57% hold vs open (9:30-10:30) 42%
+- PUT walls outperform CALL walls (51% vs 47% combined dataset)
 - Gamma regime → vol regime mapping (Dim/Eraker/Vilkov 2025)
 - Modern SPX in amplification not pinning regime (Elms 2026)
 - Macro weekly hit rate 76.9% (13 weeks; significant vs random, NOT vs bull base rate)
+
+**Known limitations of hold_prob:**
+- "HELD" = price didn't blast through in 30 min — not a profitable trade guarantee
+- EOD SPY walls have 85.6% hold rate (structural EOD levels) vs QQQ intraday 48.5%
+- time_of_day signal is partially an artifact of the 30-min label window (afternoon has less time to break)
+- limit_order_backtest showed max 43% win rate at 3:1 RR — wall holds ≠ profitable reversals
 
 **Theory-grounded but uncalibrated:**
 - Composite `score` (REGIME_WEIGHTS 3×3 grid) — AUC 0.53, near-random on 0DTE data
@@ -384,8 +429,9 @@ at 10 PM UTC. Requires `FRED_API_KEY` repo secret.
 
 **Known data limitations:**
 - OPRA CBBO uses quote size as OI proxy — underestimates true dealer exposure vs FreeFlow live data
-- hold_prob trained on 2025 bull year only; will need retraining for bear/volatile regimes
-- `vex_over_gex` ratio has different scale in OPRA vs FreeFlow — excluded from live `computeHoldProb`
+- SPY EOD pipeline uses volume as OI proxy (resets daily) — weaker proxy than OPRA quote size
+- `vex_over_gex` and `charmex_over_gex` have different unit scales in OPRA vs FreeFlow — excluded from live `computeHoldProb`
+- VP features (pd_on_hvn, pw_on_lvn, etc.) require historical NQ 1m bars — can't be computed in Netlify function, default to training means
 
 ---
 
@@ -395,8 +441,13 @@ at 10 PM UTC. Requires `FRED_API_KEY` repo secret.
   options-flow + entropy/PCA; Layer 3 is per-strike scoring. Each has its own update cadence.
 - **Python intraday script is NOT canonical** — `intraday.js` is the production path. Python is
   for hindcasting only.
-- **`hold_prob` coefficients must not be hand-tuned** — update only by retraining via the OPRA
+- **`hold_prob` coefficients must not be hand-tuned** — update only by retraining via the OPRA + SPY
   pipeline. Source of truth is `models/wall_score_intraday.json`; hardcode into `_LR` in `options.js`.
+  The `_LR` object has 27 features; all unavailable at inference time default to their training means.
+- **Windows encoding** — scripts with Unicode characters (→ ✓ ⚠) will crash on cp1252. Prefix with
+  `$env:PYTHONIOENCODING="utf-8";` in PowerShell or run with `python -u`.
+- **Large CSVs are gitignored** — `intraday_touches.csv`, `spy_touches.csv`, `reversal_backtest.csv`,
+  `limit_order_backtest.csv` exceed 100MB and are excluded from git. Regenerate locally from pipeline.
 - **COT data lag** — CFTC releases Tuesday data on Friday. Staleness check auto-refreshes if >9 days.
 - **All time arithmetic must be ET** — `freeflow_logger.py` and CI runners use ET explicitly.
 - **`--live` mode bypasses processed CSVs** — `05_weekly_report.py --live` downloads fresh from yfinance.
