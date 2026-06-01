@@ -7,7 +7,7 @@ const https = require('https');
 const FILTER_PCT = 5.0;
 const MIN_SCORE  = 20.0;
 
-const VALID_USERS        = ['aseras'];
+const VALID_USERS        = ['aseras', 'awsame303', 'pinkus'];
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 // Two-dimensional scoring weight table: [vol_regime][gamma_regime].
@@ -237,6 +237,14 @@ const _LR = {
     vp_aligned:         0.379631,
   },
 };
+
+// Expected hold_prob for a wall with all-average Greek features at the given
+// time of day. Used by the frontend to set a time-adjusted display threshold.
+function computeTimeBaseline(timeOfDayET) {
+  const z = _LR.intercept
+    + _LR.coef.time_of_day * (timeOfDayET - _LR.mean.time_of_day) / _LR.scale.time_of_day;
+  return 1 / (1 + Math.exp(-z));
+}
 
 // gammaFlip and futuresPrice are optional; when provided, enables in_neg_gamma
 // and wall_above_flip features which meaningfully improve the prediction.
@@ -544,7 +552,7 @@ const PINNING_REGIME_ACTIVE = false;
 module.exports = {
   FILTER_PCT, MIN_SCORE, VALID_USERS, SESSION_MAX_AGE_MS,
   REGIME_WEIGHTS, AGENT_HEADERS, BASE_HEADERS,
-  isAuthorized, fetchJson, httpGetJson, todayET, currentHourET, computeHoldProb,
+  isAuthorized, fetchJson, httpGetJson, todayET, currentHourET, computeHoldProb, computeTimeBaseline,
   aggregateDataset, computeGammaFlip, normalizeAbs,
   nearbyStrikes, scoreLevels,
   classifyVolRegime, getWeights,

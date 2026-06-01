@@ -1288,68 +1288,45 @@ function typeTagClass(net_gex) {
 // ── LEVELS SORT STATE ─────────────────────────────
 const lvlSort = { col: "hold_prob", dir: "desc" };
 let _lvlData = null;
+// Dynamic green threshold: max(55, time_baseline_pct + 5). Updated each load.
+let _holdGreenThreshold = 55;
 
 // ── LEVELS ALERT THRESHOLDS ───────────────────────
-// STRONG_WALL_FRONT mirrors STRONG_WALL in netlify/functions/intraday.js (60).
-// APPROACH_THRESHOLD: within this many NQ points → show reversal target.
-// MIN_TARGET_DISTANCE: reversal target must be at least this far from price.
-const STRONG_WALL_FRONT   = 60;
-const APPROACH_THRESHOLD  = 40;
-const MIN_TARGET_DISTANCE = 80;
+// APPROACH_THRESHOLD: within this many NQ points → show "approaching" badge.
+const APPROACH_THRESHOLD = 40;
 
-// Pick the nearest strong wall to current price and the best opposing reversal
-// target on the other side of price (≥ MIN_TARGET_DISTANCE NQ pts away).
-// Proximity logic stays in NQ pts (thresholds are NQ-calibrated); display uses QQQ.
-function buildLevelAlert(levels, nqPrice) {
+// Directional bias panel: best CALL WALL above spot (short) + best PUT WALL
+// below spot (long), each ranked by hold_prob. Spot-price filter naturally
+// drops walls that have already been hit.
+function buildBiasLevels(levels, nqPrice) {
   if (!levels || !levels.length || nqPrice == null) return null;
-
-  const usable = levels.filter(function(l) { return l.dist_nq != null && l.score != null; });
+  const usable = levels.filter(function(l) { return l.dist_nq != null && l.hold_prob != null; });
   if (!usable.length) return null;
 
-  const strong = usable.filter(function(l) { return l.score >= STRONG_WALL_FRONT; });
-  const pool   = strong.length ? strong : usable;
-
-  const watched = pool.slice().sort(function(a, b) {
-    return Math.abs(a.dist_nq) - Math.abs(b.dist_nq);
-  })[0];
-  if (!watched) return null;
-
-  const above   = watched.dist_nq > 0;
-  const absDist = Math.abs(watched.dist_nq);
-
-  // Reversal target sits on the OPPOSITE side of price from the watched wall:
-  // wall above (resistance) → target below; wall below (support) → target above.
-  const wantBelow = above;
-  const candidates = usable.filter(function(l) {
-    if (l === watched) return false;
-    if (Math.abs(l.dist_nq) < MIN_TARGET_DISTANCE) return false;
-    return wantBelow ? l.dist_nq < 0 : l.dist_nq > 0;
-  });
-  const strongCands = candidates.filter(function(c) { return c.score >= STRONG_WALL_FRONT; });
-  const targetPool  = strongCands.length ? strongCands : candidates;
-  const target = targetPool.length
-    ? targetPool.slice().sort(function(a, b) { return b.score - a.score; })[0]
+  // Short: highest hold_prob CALL WALL still above spot
+  const shortCands = usable.filter(function(l) { return l.dist_nq > 0 && (l.net_gex || 0) > 0; });
+  const shortLevel = shortCands.length
+    ? shortCands.slice().sort(function(a, b) { return b.hold_prob - a.hold_prob; })[0]
     : null;
 
-  return {
-    watched: watched,
-    absDist: absDist,
-    above:   above,
-    approaching: absDist <= APPROACH_THRESHOLD,
-    target:  target,
-  };
+  // Long: highest hold_prob PUT WALL still below spot
+  const longCands = usable.filter(function(l) { return l.dist_nq < 0 && (l.net_gex || 0) < 0; });
+  const longLevel = longCands.length
+    ? longCands.slice().sort(function(a, b) { return b.hold_prob - a.hold_prob; })[0]
+    : null;
+
+  return { shortLevel: shortLevel, longLevel: longLevel };
 }
 
-function renderLevelAlert(alert, qqqPrice) {
-  if (!alert) return null;
-  const sideCls = alert.above ? "bear-side" : "bull-side";
-  const box = el("div", {className: "lvl-alert " + sideCls});
+function renderBiasLevels(bias, qqqPrice) {
+  if (!bias || (!bias.shortLevel && !bias.longLevel)) return null;
+  const box = el("div", {className: "lvl-alert"});
 
-  function row(lbl, level, distAbove) {
+  function row(lbl, level, dirAbove) {
     const r = el("div", {className: "lvl-alert-row"});
     r.appendChild(el("div", {className: "lvl-alert-lbl"}, lbl));
-    const arrow = distAbove ? "▲" : "▼";
-    const aColor = distAbove ? "var(--bear)" : "var(--bull)";
+    const arrow = dirAbove ? "▲" : "▼";
+    const aColor = dirAbove ? "var(--bear)" : "var(--bull)";
     r.appendChild(el("span", {style:{color: aColor, fontWeight:"700"}}, arrow + " "));
     r.appendChild(el("span", {className: "lvl-alert-main"},
       String(level.type || "WALL") + "  @  " +
@@ -1358,46 +1335,38 @@ function renderLevelAlert(alert, qqqPrice) {
     const distQQQ = (level.strike_etf != null && qqqPrice != null)
       ? Math.abs(level.strike_etf - qqqPrice).toFixed(2)
       : null;
-    var alertHoldPct = level.hold_prob != null ? Math.round(level.hold_prob * 100) + "% hold" : "score " + (level.score != null ? level.score.toFixed(0) : "—");
+    const holdPct = level.hold_prob != null ? Math.round(level.hold_prob * 100) + "% hold" : "score " + (level.score != null ? level.score.toFixed(0) : "—");
     r.appendChild(el("span", {className: "lvl-alert-meta"},
-      (distQQQ != null ? "$" + distQQQ + " " : "") + (distAbove ? "above" : "below") +
-      " · " + alertHoldPct
+      (distQQQ != null ? "$" + distQQQ + " " : "") + (dirAbove ? "above" : "below") +
+      " · " + holdPct
     ));
+    if (Math.abs(level.dist_nq) <= APPROACH_THRESHOLD) {
+      r.appendChild(el("span", {className: "lvl-alert-approach"}, "approaching"));
+    }
     return r;
   }
 
-  const headRow = row("Watching", alert.watched, alert.above);
-  if (alert.approaching) {
-    headRow.appendChild(el("span", {className: "lvl-alert-approach"}, "approaching"));
+  function hint(level) {
+    var conf = level && level.confluence;
+    var hp   = level && level.hold_prob;
+    var txt  = null, color = null;
+    if (conf) {
+      txt = "Multi-Greek confluence ✓"; color = "var(--bull)";
+    } else if (hp != null && hp >= 0.55) {
+      txt = "Single-Greek lead — LVN or OTE adds conviction"; color = "var(--muted)";
+    } else {
+      txt = "Greeks partial — look for LVN or OTE entry confirmation"; color = "var(--bear)";
+    }
+    return el("div", {style:{fontSize:"11px",color:color,padding:"0 8px 4px",fontStyle:"italic",opacity:"0.85"}}, txt);
   }
-  box.appendChild(headRow);
 
-  if (alert.approaching && alert.target) {
-    box.appendChild(row("Target on reversal", alert.target, alert.target.dist_nq > 0));
+  if (bias.shortLevel) {
+    box.appendChild(row("Short at", bias.shortLevel, true));
+    box.appendChild(hint(bias.shortLevel));
   }
-
-  // Confirmation hint — shown when Greeks don't fully stack
-  var conf  = alert.watched && alert.watched.confluence;
-  var hp    = alert.watched && alert.watched.hold_prob;
-  var hint  = null;
-  if (!conf && hp != null && hp < 0.55) {
-    hint = "Greeks partial — look for LVN or OTE entry confirmation";
-  } else if (!conf && hp != null && hp >= 0.55) {
-    hint = "Single-Greek lead — LVN or OTE adds conviction";
-  } else if (conf) {
-    hint = "Multi-Greek confluence ✓";
-  }
-  if (hint) {
-    var hintColor = conf ? "var(--bull)" : (hp != null && hp < 0.55 ? "var(--bear)" : "var(--muted)");
-    box.appendChild(el("div", {
-      style: {
-        fontSize: "11px",
-        color: hintColor,
-        padding: "4px 8px 2px",
-        fontStyle: "italic",
-        opacity: "0.85"
-      }
-    }, hint));
+  if (bias.longLevel) {
+    box.appendChild(row("Long at", bias.longLevel, false));
+    box.appendChild(hint(bias.longLevel));
   }
 
   return box;
@@ -1422,7 +1391,7 @@ function makeLvlRow(lvl) {
 
   var holdPct = lvl.hold_prob != null ? Math.round(lvl.hold_prob * 100) : null;
   var holdColor = holdPct == null ? "var(--muted)"
-    : holdPct >= 55 ? "var(--bull)"
+    : holdPct >= _holdGreenThreshold ? "var(--bull)"
     : holdPct >= 40 ? "var(--muted)"
     : "var(--bear)";
   tr.appendChild(el("td", {style:{color:holdColor, fontWeight:"500"}},
@@ -1513,6 +1482,9 @@ function renderAllTable(wrap, levels) {
 // ── RENDER LEVELS ─────────────────────────────────
 function renderLevels(d) {
   _lvlData = d;
+  if (d.time_baseline != null) {
+    _holdGreenThreshold = Math.max(55, Math.round(d.time_baseline * 100) + 5);
+  }
   const app = document.getElementById("levels-app");
   clearEl(app);
 
@@ -1611,7 +1583,7 @@ function renderLevels(d) {
   refreshBar.appendChild(el("div", {id:"levels-refresh-countdown", className:"refresh-countdown"}, ""));
   app.appendChild(refreshBar);
 
-  const alertNode = renderLevelAlert(buildLevelAlert(levels, d.nq_price), d.qqq_price);
+  const alertNode = renderBiasLevels(buildBiasLevels(levels, d.nq_price), d.qqq_price);
   if (alertNode) app.appendChild(alertNode);
 
   // ── SUPPORT / RESISTANCE PANELS ──

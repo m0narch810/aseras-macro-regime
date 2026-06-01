@@ -1,7 +1,7 @@
 const {
   BASE_HEADERS, isAuthorized, fetchJson,
-  todayET, aggregateDataset, computeGammaFlip, scoreLevels,
-  classifyVolRegime, getWeights,
+  todayET, currentHourET, aggregateDataset, computeGammaFlip, scoreLevels,
+  classifyVolRegime, getWeights, computeTimeBaseline,
 } = require('./lib/options');
 
 const SYMBOL   = 'QQQ';
@@ -104,6 +104,7 @@ exports.handler = async (event) => {
         rv_iv_ratio: rvIvRatio   != null ? Math.round(rvIvRatio   * 1000) / 1000 : null,
         hv21:        hv21        != null ? Math.round(hv21        * 10)   / 10   : null,
         levels,
+        time_baseline: computeTimeBaseline(currentHourET()),
       }),
     };
 
