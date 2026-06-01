@@ -1,47 +1,48 @@
 {
   "meta": {
-    "generated_at": "2026-05-29 23:19",
-    "week_start": "2026-05-29",
-    "week_end": "2026-06-04",
+    "generated_at": "2026-05-31 19:38",
+    "week_start": "2026-06-05",
+    "week_end": "2026-06-11",
     "instrument": "NQ / ES Futures"
   },
-  "confluence": "LEAN BULL",
+  "confluence": "MIXED",
   "macro_regime": {
-    "name": "LEAN RISK-ON",
-    "score": 1,
+    "name": "TRANSITION",
+    "score": 0,
     "max_score": 11,
     "bullish_inputs": [
-      "net_liq_wow",
       "net_liq_4w",
+      "vix_wow",
       "vix_4w",
-      "yield_curve_wow"
+      "us10y_wow"
     ],
     "bearish_inputs": [
-      "dxy_wow",
-      "us10y_wow",
-      "us10y_4w"
+      "net_liq_wow",
+      "us10y_4w",
+      "yield_curve_wow",
+      "yield_curve_4w"
     ],
     "factor_scores": {
-      "net_liq_wow": 1,
+      "net_liq_wow": -1,
       "net_liq_4w": 1,
-      "vix_wow": 0,
+      "vix_wow": 1,
       "vix_4w": 1,
-      "dxy_wow": -1,
+      "dxy_wow": 0,
       "dxy_4w": 0,
-      "us10y_wow": -1,
+      "us10y_wow": 1,
       "us10y_4w": -1,
-      "yield_curve_wow": 1,
-      "yield_curve_4w": 0,
+      "yield_curve_wow": -1,
+      "yield_curve_4w": -1,
       "vix_ratio_wow": 0
     }
   },
   "price_model": {
-    "direction": "BULLISH",
-    "probability": 0.51
+    "direction": "BEARISH",
+    "probability": 0.49
   },
   "vol_forecast": {
-    "weekly_vol_pct": 1.5,
-    "percentile": 28,
+    "weekly_vol_pct": 1.4,
+    "percentile": 23,
     "label": "LOW VOL"
   },
   "cot": {
@@ -54,27 +55,27 @@
     "cot_extreme": true,
     "cot_extreme_label": "FUMES_SHORT"
   },
-  "fed_stance": "DOVISH",
+  "fed_stance": "NEUTRAL",
   "trend_phase": "EXHAUSTION",
   "macro_cluster": false,
   "macro_cluster_dir": null,
   "vix_term_structure": {
-    "vix_ratio": 0.839,
+    "vix_ratio": 0.821,
     "structure": "CONTANGO",
     "mood": "calm",
-    "vvix": 88.6,
-    "ratio_wow": 0.0,
+    "vvix": 86.1,
+    "ratio_wow": -0.018,
     "direction": "falling",
     "bias": "bullish"
   },
   "key_levels": {
-    "4w_high": 29782.0,
-    "pw_high": 29734.0,
-    "pw_close": 29447.25,
-    "pw_mid": 29198.5,
-    "pw_low": 28663.0,
-    "4w_low": 26992.0,
-    "atr_5d": 489.0,
-    "atr_20d": 509.73
+    "4w_high": 30379.0,
+    "pw_high": 30379.0,
+    "pw_close": 30307.0,
+    "pw_mid": 29907.5,
+    "pw_low": 29436.0,
+    "4w_low": 27536.25,
+    "atr_5d": 319.5,
+    "atr_20d": 502.73
   }
 }

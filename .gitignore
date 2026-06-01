@@ -18,3 +18,12 @@ scripts/methodology_config.py
 
 # Private methodology and research source PDFs
 clauderesources/
+
+# Large processed datasets (too big for GitHub)
+data/processed/intraday_touches.csv
+data/processed/spy_touches.csv
+data/processed/reversal_backtest.csv
+data/processed/limit_order_backtest.csv
+data/processed/intraday_score_eval.csv
+data/processed/wall_score_eval.csv
+data/processed/wall_outcomes.csv

@@ -23,6 +23,14 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from compute_volume_profile import (
+    build_vp_cache,
+    build_week_vp_cache,
+    get_prev_day_vp,
+    get_prev_week_vp,
+    vp_features_for_wall,
+)
+
 ROOT          = Path(__file__).parent.parent
 SNAPSHOTS_DIR = ROOT / "data" / "processed" / "gex_snapshots_0dte"
 NQ_1M_PATH    = ROOT / "data" / "processed" / "NQ_1m_clean.csv"
@@ -191,6 +199,14 @@ def main():
     nq = nq.rename(columns={"date": "dt"})
     nq["date_only"] = nq["dt"].dt.date
 
+    print("Building volume profile cache (one VP per trading day)...")
+    vp_cache = build_vp_cache(nq)
+    all_dates_sorted = np.array(sorted(vp_cache.keys()))
+    print(f"  Cached {len(vp_cache)} daily volume profiles")
+    print("Building 5-day rolling VP cache...")
+    week_cache = build_week_vp_cache(vp_cache, all_dates_sorted)
+    print(f"  Done")
+
     # Discover all days that have intraday snapshots
     snap_dates = sorted({
         f.stem[13:21]   # YYYYMMDD from gex_snapshot_YYYYMMDD_HHMM.csv
@@ -208,6 +224,10 @@ def main():
         if bars.empty:
             skipped += 1
             continue
+
+        # Pre-compute previous-day and previous-week VPs for this date
+        pd_vp = get_prev_day_vp(vp_cache, date, all_dates_sorted)
+        pw_vp = get_prev_week_vp(week_cache, date, all_dates_sorted)
 
         # Load all intraday snapshots for this day, sorted by time
         day_snaps = load_day_snapshots(date_str)
@@ -276,6 +296,13 @@ def main():
                     "confluence":       int(wall["confluence"]) if "confluence" in wall else 0,
                     "T_hours":          round(float(wall["T_hours"]), 3) if "T_hours" in wall else 6.0,
                 }
+                # Volume profile structural alignment features
+                wall_meta.update(vp_features_for_wall(wall_nq, pd_vp, prefix="pd"))
+                wall_meta.update(vp_features_for_wall(wall_nq, pw_vp, prefix="pw"))
+                # Composite flag: wall sits on an HVN from either lookback
+                wall_meta["vp_aligned"] = int(
+                    wall_meta["pd_on_hvn"] or wall_meta["pw_on_hvn"]
+                )
 
                 events = label_touches(bars, wall_nq, wall_id)
                 if events:

@@ -137,62 +137,104 @@ function currentHourET() {
 
 // ── HOLD PROBABILITY MODEL ────────────────────────────────────────────────────
 // Logistic regression fitted on 489,396 intraday touch events from 2,897
-// intraday snapshots across 224 trading days (Feb-Dec 2025).
-// CV AUC 0.6166 ± 0.0007 vs current composite score AUC 0.531.
-// XGBoost CV AUC 0.7815 ± 0.0009 (not portable to JS; LR used for inference).
+// Combined QQQ (Feb-Dec 2025) + SPY (Jan 2020-Dec 2022) dataset — 511,571 touch events.
+// LR CV AUC 0.6485 ± 0.0015 vs composite score AUC 0.521. XGBoost CV AUC 0.8297.
+// Multi-regime training: 2020 COVID, 2021 bull, 2022 bear, 2025 bull.
 // Coefficients from models/wall_score_intraday.json — do not hand-tune.
 //
-// Features unavailable at request time (approach_vel, from_below) default to
-// their training-set means, zeroing out their standardised contribution.
+// Features unavailable at inference time default to training-set means,
+// zeroing out their standardised contribution:
+//   - vex_over_gex, charmex_over_gex: unit-scale mismatch between OPRA and FreeFlow
+//   - approach_vel, from_below: intraday touch features, not available at snapshot time
+//   - pd_*/pw_* (volume profile): requires historical NQ 1m bars, not available in function
 const _LR = {
-  intercept: -0.002900,
+  intercept: 0.003902,
   coef: {
-    gex_norm:          0.001755,
-    vex_norm:          0.041784,
-    charmex_norm:      0.081388,
-    oi_norm:          -0.030934,
-    vex_over_gex:     -0.018243,
-    charmex_over_gex:  0.014587,
-    dist_pct:          0.054072,
-    is_high_vol:      -0.199050,
-    is_contraction:    0.006214,
-    is_put:            0.153162,
-    in_neg_gamma:     -0.034041,
-    wall_above_flip:  -0.003544,
-    confluence:        0.064043,
-    time_of_day:       0.280621,
+    gex_norm:          0.001064,
+    vex_norm:         -0.033479,
+    charmex_norm:      0.077967,
+    oi_norm:           0.033544,
+    vex_over_gex:      0.000328,
+    charmex_over_gex: -0.016355,
+    dist_pct:          0.058991,
+    is_high_vol:      -0.141109,
+    is_contraction:    0.099613,
+    is_put:            0.112393,
+    in_neg_gamma:      0.029986,
+    wall_above_flip:  -0.118096,
+    confluence:        0.035603,
+    time_of_day:       0.291898,
+    approach_vel:     -0.017616,
+    from_below:       -0.150283,
+    pd_on_hvn:        -0.210247,
+    pd_on_lvn:         0.005647,
+    pd_in_value_area: -0.077016,
+    pd_dist_to_poc:   -0.437749,
+    pd_dist_to_hvn:    0.073889,
+    pd_dist_to_lvn:    0.205878,
+    pw_on_hvn:        -0.149423,
+    pw_on_lvn:        -0.056097,
+    pw_in_value_area: -0.055324,
+    pw_dist_to_poc:   -0.054233,
+    vp_aligned:        0.241393,
   },
   mean: {
-    gex_norm:          78.899807,
-    vex_norm:          67.226002,
-    charmex_norm:      29.932098,
-    oi_norm:           25.150656,
-    vex_over_gex:       0.000312,
-    charmex_over_gex:   0.521312,
-    dist_pct:          -0.028892,
-    is_high_vol:        0.766870,
-    is_contraction:     0.055088,
-    is_put:             0.782407,
-    in_neg_gamma:       0.005439,
-    wall_above_flip:    0.998627,
-    confluence:         0.275176,
-    time_of_day:       12.530856,
+    gex_norm:          77.233949,
+    vex_norm:          65.747533,
+    charmex_norm:      30.218452,
+    oi_norm:           26.118006,
+    vex_over_gex:      -3.684046,
+    charmex_over_gex:  -1.707606,
+    dist_pct:          -0.028924,
+    is_high_vol:        0.737118,
+    is_contraction:     0.087321,
+    is_put:             0.768105,
+    in_neg_gamma:       0.025246,
+    wall_above_flip:    0.977366,
+    confluence:         0.271563,
+    time_of_day:       12.522011,
+    approach_vel:       0.945891,
+    from_below:         0.473461,
+    pd_on_hvn:          0.105618,
+    pd_on_lvn:          0.087433,
+    pd_in_value_area:   0.181578,
+    pd_dist_to_poc:   120.777540,
+    pd_dist_to_hvn:    95.566733,
+    pd_dist_to_lvn:    83.303753,
+    pw_on_hvn:          0.071441,
+    pw_on_lvn:          0.142000,
+    pw_in_value_area:   0.277574,
+    pw_dist_to_poc:   292.613343,
+    vp_aligned:         0.174607,
   },
   scale: {
-    gex_norm:          28.981598,
-    vex_norm:          31.028463,
-    charmex_norm:      31.295004,
-    oi_norm:           22.303241,
-    vex_over_gex:       0.000487,
-    charmex_over_gex:   3.334451,
-    dist_pct:           0.126915,
-    is_high_vol:        0.422824,
-    is_contraction:     0.228153,
-    is_put:             0.412609,
-    in_neg_gamma:       0.073551,
-    wall_above_flip:    0.037030,
-    confluence:         0.446603,
-    time_of_day:        1.700616,
+    gex_norm:          30.326448,
+    vex_norm:          32.001922,
+    charmex_norm:      31.526241,
+    oi_norm:           23.179645,
+    vex_over_gex:     539.318444,
+    charmex_over_gex: 117.024901,
+    dist_pct:           0.263279,
+    is_high_vol:        0.440199,
+    is_contraction:     0.282305,
+    is_put:             0.422043,
+    in_neg_gamma:       0.156871,
+    wall_above_flip:    0.148734,
+    confluence:         0.444766,
+    time_of_day:        1.702099,
+    approach_vel:       5.155001,
+    from_below:         0.499295,
+    pd_on_hvn:          0.307348,
+    pd_on_lvn:          0.282468,
+    pd_in_value_area:   0.385496,
+    pd_dist_to_poc:   157.127889,
+    pd_dist_to_hvn:   140.624823,
+    pd_dist_to_lvn:   125.023897,
+    pw_on_hvn:          0.257560,
+    pw_on_lvn:          0.349050,
+    pw_in_value_area:   0.447802,
+    pw_dist_to_poc:   288.250723,
+    vp_aligned:         0.379631,
   },
 };
 
@@ -205,30 +247,28 @@ function computeHoldProb(level, volRegime, timeOfDayET, gammaFlip, futuresPrice)
     ? level.dist_nq / (level.strike_futures || futuresPrice) * 100
     : 0;
 
-  const raw = {
-    gex_norm:         Math.abs(level.gex_norm      || 0),
-    vex_norm:         Math.abs(level.vex_norm      || 0),
-    charmex_norm:     Math.abs(level.charmex_norm  || 0),
-    oi_norm:          Math.abs(level.oi_norm       || 0),
-    // vex_over_gex and charmex_over_gex were computed from OPRA data which has
-    // a different unit scale than FreeFlow live data. Default to training means
-    // (zero standardised contribution) to avoid blowing up the sigmoid.
-    vex_over_gex:     _LR.mean.vex_over_gex,
-    charmex_over_gex: _LR.mean.charmex_over_gex,
-    dist_pct:         distPct,
-    is_high_vol:      volRegime === 'EXPANSION'    ? 1 : 0,
-    is_contraction:   volRegime === 'CONTRACTION' ? 1 : 0,
-    is_put:           isPut ? 1 : 0,
-    in_neg_gamma:     (gammaFlip != null && futuresPrice != null)
-                        ? (futuresPrice < gammaFlip ? 1 : 0)
-                        : _LR.mean.in_neg_gamma,
-    wall_above_flip:  (gammaFlip != null && level.strike_futures != null)
-                        ? (level.strike_futures > gammaFlip ? 1 : 0)
-                        : _LR.mean.wall_above_flip,
-    // Multi-Greek confluence: 1 when GEX+VEX+CharmEX all exceed threshold
-    confluence:       (level.confluence != null) ? level.confluence : _LR.mean.confluence,
-    time_of_day:      timeOfDayET || 12.38,
-  };
+  // Start with training means for all features — unavailable features contribute zero
+  // after standardisation (raw[f] == mean[f] => (raw-mean)/scale == 0).
+  const raw = Object.assign({}, _LR.mean);
+
+  // Override with computed values for features available at inference time
+  raw.gex_norm         = Math.abs(level.gex_norm     || 0);
+  raw.vex_norm         = Math.abs(level.vex_norm     || 0);
+  raw.charmex_norm     = Math.abs(level.charmex_norm || 0);
+  raw.oi_norm          = Math.abs(level.oi_norm      || 0);
+  raw.dist_pct         = distPct;
+  raw.is_high_vol      = volRegime === 'EXPANSION'   ? 1 : 0;
+  raw.is_contraction   = volRegime === 'CONTRACTION' ? 1 : 0;
+  raw.is_put           = isPut ? 1 : 0;
+  raw.in_neg_gamma     = (gammaFlip != null && futuresPrice != null)
+                           ? (futuresPrice < gammaFlip ? 1 : 0)
+                           : _LR.mean.in_neg_gamma;
+  raw.wall_above_flip  = (gammaFlip != null && level.strike_futures != null)
+                           ? (level.strike_futures > gammaFlip ? 1 : 0)
+                           : _LR.mean.wall_above_flip;
+  raw.confluence       = (level.confluence != null) ? level.confluence : _LR.mean.confluence;
+  raw.time_of_day      = timeOfDayET || _LR.mean.time_of_day;
+  // vex_over_gex, charmex_over_gex, approach_vel, from_below, pd_*/pw_* stay at mean
 
   let z = _LR.intercept;
   for (const [feat, coef] of Object.entries(_LR.coef)) {

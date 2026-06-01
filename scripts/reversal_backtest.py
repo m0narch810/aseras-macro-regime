@@ -43,31 +43,31 @@ def build_traces(touches, nq):
       adv_mat   : (N, MAX_BARS) — adverse move per bar (through wall)
       valid_mask: (N,) bool — True if we got enough forward bars
     """
-    N = len(touches)
-    fav_mat = np.full((N, MAX_BARS), np.nan)
-    adv_mat = np.full((N, MAX_BARS), np.nan)
+    N          = len(touches)
+    fav_mat    = np.full((N, MAX_BARS), np.nan)
+    adv_mat    = np.full((N, MAX_BARS), np.nan)
+    nq_index   = nq.index
+    nq_closes  = nq["close"].values
+    n_nq       = len(nq_closes)
 
-    for i, (_, t) in enumerate(touches.iterrows()):
-        wall_nq    = t["wall_nq"]
-        touch_dt   = pd.Timestamp(t["touch_time"])
-        from_below = t["approach_dir"] == "FROM_BELOW"
+    wall_arr   = touches["wall_nq"].values
+    dt_arr     = touches["touch_time"].values          # numpy datetime64
+    dir_arr    = touches["approach_dir"].values
 
-        pos = nq.index.searchsorted(touch_dt, side="right")
-        fwd = nq.iloc[pos : pos + MAX_BARS]
-        nb  = len(fwd)
+    for i in range(N):
+        pos = nq_index.searchsorted(dt_arr[i], side="right")
+        end = min(pos + MAX_BARS, n_nq)
+        nb  = end - pos
         if nb < 5:
             continue
-
-        closes = fwd["close"].values[:nb]
-        if from_below:
-            fav = wall_nq - closes   # short trade: profit if price falls
-            adv = closes - wall_nq   # adverse if price rises above wall
+        closes = nq_closes[pos:end]
+        wall   = wall_arr[i]
+        if dir_arr[i] == "FROM_BELOW":
+            fav_mat[i, :nb] = wall - closes
+            adv_mat[i, :nb] = closes - wall
         else:
-            fav = closes - wall_nq
-            adv = wall_nq - closes
-
-        fav_mat[i, :nb] = fav
-        adv_mat[i, :nb] = adv
+            fav_mat[i, :nb] = closes - wall
+            adv_mat[i, :nb] = wall - closes
 
     valid_mask = ~np.isnan(fav_mat[:, 0])
     return fav_mat, adv_mat, valid_mask
@@ -77,36 +77,37 @@ def build_traces(touches, nq):
 
 def precompute_outcomes(fav_mat, adv_mat):
     """
-    For each touch (rows) and each stop/target threshold (cols), compute:
-      first_stop[i, s]    = first bar where adv >= STOP_NQS[s]  (-1 if never)
-      first_target[i, t]  = first bar where fav >= TARGET_NQS[t] (-1 if never)
-      max_fav[i]          = max favorable in window
+    Fully vectorized: no Python loops over touches or bars.
+
+    Stop requires 2 consecutive bars through the threshold (same logic as before).
+    Uses numpy sliding-window AND to find the first such pair per row.
     """
-    N = fav_mat.shape[0]
-    ns, nt = len(STOP_NQS), len(TARGET_NQS)
+    N  = fav_mat.shape[0]
+    ns = len(STOP_NQS)
+    nt = len(TARGET_NQS)
 
     first_stop   = np.full((N, ns), MAX_BARS + 1, dtype=np.int32)
     first_target = np.full((N, nt), MAX_BARS + 1, dtype=np.int32)
 
+    adv_clean = np.nan_to_num(adv_mat, nan=-np.inf)
+    fav_clean = np.nan_to_num(fav_mat, nan=-np.inf)
+
     for si, stop in enumerate(STOP_NQS):
-        # Stop requires 2 consecutive bars through stop level — prevents
-        # triggering on the brief probes that 0DTE gamma hedging causes
-        hit = np.nan_to_num(adv_mat >= stop, nan=0).astype(bool)
-        for i in range(N):
-            for b in range(len(hit[i]) - 1):
-                if hit[i, b] and hit[i, b + 1]:
-                    first_stop[i, si] = b
-                    break
+        hit   = adv_clean >= stop                       # (N, MAX_BARS)
+        consec = hit[:, :-1] & hit[:, 1:]              # (N, MAX_BARS-1): pair hit
+        any_hit = consec.any(axis=1)                    # (N,)
+        first_stop[any_hit, si] = np.argmax(consec[any_hit], axis=1).astype(np.int32)
 
     for ti, tgt in enumerate(TARGET_NQS):
-        hit = fav_mat >= tgt
-        hit = np.nan_to_num(hit, nan=0).astype(bool)
-        for i in range(N):
-            idx = np.argmax(hit[i])
-            if hit[i, idx]:
-                first_target[i, ti] = idx
+        hit     = fav_clean >= tgt                      # (N, MAX_BARS)
+        any_hit = hit.any(axis=1)
+        first_target[any_hit, ti] = np.argmax(hit[any_hit], axis=1).astype(np.int32)
 
-    max_fav = np.nanmax(np.where(np.isnan(fav_mat), -np.inf, fav_mat), axis=1)
+    max_fav = np.where(
+        np.all(np.isnan(fav_mat), axis=1),
+        -np.inf,
+        np.nanmax(fav_mat, axis=1),
+    )
     return first_stop, first_target, max_fav
 
 
@@ -168,7 +169,11 @@ def grid_search(touches_valid, first_stop, first_target):
             ["FROM_ABOVE"],
         ],
         "min_dist_pct":     [0, 1.5, 3.0],
+        # confluence_only: Greek multi-confluence requirement (original filter)
         "confluence_only":  [False, True],
+        # vp_aligned_only: wall must sit on a prior-day or prior-week HVN
+        # replaces confluence for higher-frequency setups
+        "vp_aligned_only":  [False, True],
         "stop_idx":         list(range(len(STOP_NQS))),
         "target_idx":       list(range(len(TARGET_NQS))),
         "max_bars":         [45, 60, 90, 120],
@@ -178,32 +183,54 @@ def grid_search(touches_valid, first_stop, first_target):
     combos = list(product(*param_grid.values()))
     print(f"  {len(combos):,} combinations to evaluate...")
 
-    # Precompute filter arrays for the valid subset
-    vr_arr   = touches_valid["vol_regime"].values
-    gex_arr  = touches_valid["gex_norm"].values
-    time_arr = touches_valid["time_of_day"].values
-    vel_arr  = touches_valid["approach_vel"].values
-    dir_arr  = touches_valid["approach_dir"].values
-    dist_arr = touches_valid["dist_pct"].abs().values
+    # Precompute all unique filter masks once — avoids rebuilding 489K arrays 1.5M times
+    vr_arr    = touches_valid["vol_regime"].values
+    gex_arr   = touches_valid["gex_norm"].values
+    time_arr  = touches_valid["time_of_day"].values
+    vel_arr   = touches_valid["approach_vel"].values
+    dir_arr   = touches_valid["approach_dir"].values
+    dist_arr  = touches_valid["dist_pct"].abs().values
+    conf_arr  = touches_valid["confluence"].values if "confluence" in touches_valid.columns else np.zeros(len(touches_valid))
+    vpal_arr  = touches_valid["vp_aligned"].values if "vp_aligned" in touches_valid.columns else np.zeros(len(touches_valid))
 
+    N = len(touches_valid)
+
+    vr_masks   = {tuple(v): np.isin(vr_arr, v)   for v in param_grid["vol_regimes"]}
+    gex_masks  = {g: gex_arr  >= g                for g in param_grid["min_gex_norm"]}
+    tlo_masks  = {t: time_arr >= t                for t in param_grid["min_time"]}
+    thi_masks  = {t: time_arr <= t                for t in param_grid["max_time"]}
+    vel_masks  = {v: vel_arr  <= v                for v in param_grid["max_approach_vel"]}
+    dir_masks  = {tuple(d): np.isin(dir_arr, d)   for d in param_grid["approach_dirs"]}
+    dist_masks = {d: dist_arr >= d                for d in param_grid["min_dist_pct"]}
+    conf_mask  = conf_arr == 1
+    vpal_mask  = vpal_arr == 1
+    all_true   = np.ones(N, dtype=bool)
+
+    import sys, time
+    t0 = time.time()
     results = []
-    for combo in combos:
+    for ci, combo in enumerate(combos):
+        if ci % 100_000 == 0 and ci > 0:
+            elapsed = time.time() - t0
+            rate = ci / elapsed
+            eta = (len(combos) - ci) / rate
+            print(f"  {ci:,}/{len(combos):,}  ({ci/len(combos):.0%})  "
+                  f"elapsed={elapsed:.0f}s  eta={eta:.0f}s  results={len(results):,}", flush=True)
         p = dict(zip(keys, combo))
 
         if p["min_time"] >= p["max_time"]:
             continue
 
-        conf_arr = touches_valid["confluence"].values if "confluence" in touches_valid.columns else np.zeros(len(touches_valid))
-        conf_filter = (conf_arr == 1) if p["confluence_only"] else np.ones(len(touches_valid), dtype=bool)
         mask = (
-            np.isin(vr_arr, p["vol_regimes"]) &
-            (gex_arr  >= p["min_gex_norm"]) &
-            (time_arr >= p["min_time"]) &
-            (time_arr <= p["max_time"]) &
-            (vel_arr  <= p["max_approach_vel"]) &
-            np.isin(dir_arr, p["approach_dirs"]) &
-            (dist_arr >= p["min_dist_pct"]) &
-            conf_filter
+            vr_masks[tuple(p["vol_regimes"])] &
+            gex_masks[p["min_gex_norm"]] &
+            tlo_masks[p["min_time"]] &
+            thi_masks[p["max_time"]] &
+            vel_masks[p["max_approach_vel"]] &
+            dir_masks[tuple(p["approach_dirs"])] &
+            dist_masks[p["min_dist_pct"]] &
+            (conf_mask if p["confluence_only"]  else all_true) &
+            (vpal_mask if p["vp_aligned_only"]  else all_true)
         )
 
         out = simulate_vec(mask, first_stop, first_target,
@@ -229,6 +256,7 @@ def grid_search(touches_valid, first_stop, first_target):
             "approach_dirs":   "+".join(p["approach_dirs"]),
             "min_dist_pct":    p["min_dist_pct"],
             "confluence_only": p["confluence_only"],
+            "vp_aligned_only": p["vp_aligned_only"],
         })
 
     return pd.DataFrame(results)
@@ -243,7 +271,8 @@ def print_top(res, sort_col, n=15, title=None, extra_filter=None):
         sep(title)
     cols = ["win_rate","ev","n","stop_nq","target_nq","max_bars",
             "vol_regimes","min_gex_norm","min_time","max_time",
-            "max_approach_vel","approach_dirs","min_dist_pct"]
+            "max_approach_vel","approach_dirs","min_dist_pct",
+            "confluence_only","vp_aligned_only"]
     cols = [c for c in cols if c in top.columns]
     pd.set_option("display.width", 200)
     pd.set_option("display.max_columns", 20)

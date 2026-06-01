@@ -17,8 +17,10 @@ Outputs:
 
 Usage:
   python scripts/fit_intraday_wall_model.py
+  python scripts/fit_intraday_wall_model.py --combined   # merge QQQ + SPY datasets
 """
 
+import argparse
 import json
 import pickle
 from pathlib import Path
@@ -31,9 +33,10 @@ from sklearn.metrics import roc_auc_score, brier_score_loss
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.preprocessing import StandardScaler
 
-ROOT      = Path(__file__).parent.parent
-DATA_PATH = ROOT / "data" / "processed" / "intraday_touches.csv"
-MODELS    = ROOT / "models"
+ROOT           = Path(__file__).parent.parent
+DATA_PATH      = ROOT / "data" / "processed" / "intraday_touches.csv"
+SPY_DATA_PATH  = ROOT / "data" / "processed" / "spy_touches.csv"
+MODELS         = ROOT / "models"
 MODELS.mkdir(exist_ok=True)
 
 try:
@@ -83,8 +86,6 @@ def build_features(df):
         "charmex_norm":       df["charmex_norm"],
         "oi_norm":            df["oi_norm"],
         # Greek ratios: relative dominance at the wall
-        # vex/gex: high = vol moves dominate over gamma hedging
-        # charmex/gex: signed — charm aligned with gex (same sign) = time decay reinforces wall
         "vex_over_gex":       df["vex_over_gex"],
         "charmex_over_gex":   df["charmex_over_gex"],
         # Distance: signed — positive = wall above spot (CALL), negative = below (PUT)
@@ -94,24 +95,114 @@ def build_features(df):
         "is_contraction":     (df["vol_regime"] == "CONTRACTION").astype(float),
         # Gamma structure
         "is_put":             df["is_put"],
-        "in_neg_gamma":       df["in_neg_gamma"],       # spot below flip today
-        "wall_above_flip":    df["wall_above_flip"],    # this specific wall above flip
-        # Multi-Greek confluence: all three dealer hedging flows stack at one strike
+        "in_neg_gamma":       df["in_neg_gamma"],
+        "wall_above_flip":    df["wall_above_flip"],
+        # Multi-Greek confluence
         "confluence":         df["confluence"] if "confluence" in df.columns else 0,
         # Intraday context
         "time_of_day":        df["time_of_day"],
-        # approach_vel now direction-normalized: positive = moving toward wall
         "approach_vel":       df["approach_vel"],
         "from_below":         (df["approach_dir"] == "FROM_BELOW").astype(float),
+        # Volume profile structural alignment (previous day)
+        "pd_on_hvn":          df["pd_on_hvn"]         if "pd_on_hvn"         in df.columns else 0,
+        "pd_on_lvn":          df["pd_on_lvn"]         if "pd_on_lvn"         in df.columns else 0,
+        "pd_in_value_area":   df["pd_in_value_area"]  if "pd_in_value_area"  in df.columns else 0,
+        "pd_dist_to_poc":     df["pd_dist_to_poc"]    if "pd_dist_to_poc"    in df.columns else 0,
+        "pd_dist_to_hvn":     df["pd_dist_to_hvn"]    if "pd_dist_to_hvn"    in df.columns else 0,
+        "pd_dist_to_lvn":     df["pd_dist_to_lvn"]    if "pd_dist_to_lvn"    in df.columns else 0,
+        # Volume profile structural alignment (previous week)
+        "pw_on_hvn":          df["pw_on_hvn"]         if "pw_on_hvn"         in df.columns else 0,
+        "pw_on_lvn":          df["pw_on_lvn"]         if "pw_on_lvn"         in df.columns else 0,
+        "pw_in_value_area":   df["pw_in_value_area"]  if "pw_in_value_area"  in df.columns else 0,
+        "pw_dist_to_poc":     df["pw_dist_to_poc"]    if "pw_dist_to_poc"    in df.columns else 0,
+        # Composite: on HVN from either lookback (replaces/supplements confluence in reversal filter)
+        "vp_aligned":         df["vp_aligned"]        if "vp_aligned"        in df.columns else 0,
     })
     return X.fillna(0)
 
 
+def load_combined_dataset(verbose: bool = True) -> pd.DataFrame:
+    """
+    Load QQQ intraday touches and SPY EOD touches, tag sources, and merge.
+
+    QQQ touches have a full VP feature set; SPY touches have VP columns zeroed.
+    Both must have the same model feature columns — missing columns are filled
+    with 0 to ensure the feature matrix is identical.
+
+    Returns the combined DataFrame with a 'source' column ('qqq' or 'spy').
+    """
+    if not DATA_PATH.exists():
+        raise FileNotFoundError(f"QQQ touches not found: {DATA_PATH}\n"
+                                "  Run scripts/label_intraday_touches.py first.")
+    if not SPY_DATA_PATH.exists():
+        raise FileNotFoundError(f"SPY touches not found: {SPY_DATA_PATH}\n"
+                                "  Run scripts/label_spy_touches.py first.")
+
+    qqq = pd.read_csv(DATA_PATH)
+    spy = pd.read_csv(SPY_DATA_PATH)
+
+    # Tag source if not already present
+    if "source" not in qqq.columns:
+        qqq["source"] = "qqq"
+    if "source" not in spy.columns:
+        spy["source"] = "spy"
+
+    # Ensure both DataFrames have the same columns (fill missing with 0)
+    all_cols = sorted(set(qqq.columns) | set(spy.columns))
+    for col in all_cols:
+        if col not in qqq.columns:
+            qqq[col] = 0
+        if col not in spy.columns:
+            spy[col] = 0
+
+    combined = pd.concat([qqq, spy], ignore_index=True)
+
+    if verbose:
+        print()
+        print("  Source breakdown:")
+        for src, grp in combined.groupby("source"):
+            n     = len(grp)
+            hold  = grp["held"].mean()
+            print(f"    {src:<6}  N={n:>7,}  hold_rate={hold:.1%}")
+
+        print()
+        print("  Regime breakdown (combined):")
+        for vr, grp in combined.groupby("vol_regime"):
+            n    = len(grp)
+            hold = grp["held"].mean()
+            print(f"    {vr:<15}  N={n:>7,}  hold_rate={hold:.1%}")
+
+        print()
+        print("  Year breakdown (combined):")
+        combined["_year"] = pd.to_datetime(combined["date"], errors="coerce").dt.year
+        for yr, grp in combined.groupby("_year"):
+            n    = len(grp)
+            hold = grp["held"].mean()
+            print(f"    {yr}  N={n:>7,}  hold_rate={hold:.1%}")
+        combined.drop(columns=["_year"], inplace=True)
+
+    return combined
+
+
 def main():
-    df = pd.read_csv(DATA_PATH)
+    parser = argparse.ArgumentParser(description="Train intraday wall hold model")
+    parser.add_argument(
+        "--combined", action="store_true",
+        help="Merge intraday_touches.csv + spy_touches.csv before training",
+    )
+    args = parser.parse_args()
+
+    if args.combined:
+        sep("COMBINED QQQ + SPY INTRADAY WALL TOUCH MODEL")
+        print("  Loading combined dataset ...")
+        df = load_combined_dataset(verbose=True)
+        print(f"\n  Total samples:  {len(df)}")
+    else:
+        df = pd.read_csv(DATA_PATH)
+
     y  = df["held"].values
 
-    sep("INTRADAY WALL TOUCH MODEL")
+    sep("INTRADAY WALL TOUCH MODEL" + (" [COMBINED]" if args.combined else ""))
     print(f"  Samples:     {len(df)}")
     print(f"  Held:        {y.sum()}  ({y.mean():.1%})")
     print(f"  Broke:       {len(y) - y.sum()}  ({1 - y.mean():.1%})")
@@ -260,6 +351,15 @@ def main():
                      "xgb": xgb_model}, f)
     print(f"  Saved: {pkl_path}")
 
+    source_breakdown = {}
+    if "source" in df.columns:
+        for src, grp in df.groupby("source"):
+            source_breakdown[src] = {
+                "n":         int(len(grp)),
+                "n_held":    int(grp["held"].sum()),
+                "hold_rate": round(float(grp["held"].mean()), 4),
+            }
+
     export = {
         "features": feat_cols,
         "lr_coefficients": {k: round(float(v), 6) for k, v in coef.items()},
@@ -273,16 +373,21 @@ def main():
         "n_held": int(y.sum()),
         "n_broke": int(len(y) - y.sum()),
         "xgb_importances": {k: round(float(v), 6) for k, v in imp_sorted} if HAS_XGB else None,
+        "training_dataset": "combined_qqq_spy" if args.combined else "qqq_only",
+        "source_breakdown": source_breakdown if source_breakdown else None,
     }
     json_path = MODELS / "wall_score_intraday.json"
     with open(json_path, "w") as f:
         json.dump(export, f, indent=2)
     print(f"  Saved: {json_path}")
 
-    eval_df = df[["date", "touch_time", "wall_id", "approach_dir", "time_of_day",
-                  "approach_vel", "prior_touches", "gex_norm", "vex_norm",
-                  "charmex_norm", "oi_norm", "dist_pct", "is_put", "vol_regime",
-                  "score_current", "held", "outcome"]].copy()
+    eval_cols = ["date", "touch_time", "wall_id", "approach_dir", "time_of_day",
+                 "approach_vel", "prior_touches", "gex_norm", "vex_norm",
+                 "charmex_norm", "oi_norm", "dist_pct", "is_put", "vol_regime",
+                 "score_current", "held", "outcome"]
+    if "source" in df.columns:
+        eval_cols.append("source")
+    eval_df = df[[c for c in eval_cols if c in df.columns]].copy()
     eval_df["prob_lr"] = prob_lr
     if prob_xgb is not None:
         eval_df["prob_xgb"] = prob_xgb

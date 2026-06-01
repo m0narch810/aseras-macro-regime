@@ -2,7 +2,10 @@ name: Weekly Macro Bias Update
 
 on:
   schedule:
-    # Friday 10 PM UTC = 5 PM EST / 6 PM EDT — always after CFTC COT release (3:30 PM ET)
+    # Daily pre-market refresh Mon-Fri at 13:00 UTC (9:00 AM EDT / 8:00 AM EST)
+    # Updates bias_output.json with fresh VIX/DXY/yield readings before RTH open
+    - cron: '0 13 * * 1-5'
+    # Friday 10 PM UTC — full weekly update after CFTC COT release (3:30 PM ET)
     - cron: '0 22 * * 5'
   workflow_dispatch:   # manual trigger from the Actions tab
 
@@ -48,5 +51,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add bias_output.json
           git diff --cached --quiet -- bias_output.json \
-            || git commit -m "chore: weekly macro bias $(date -u +%Y-%m-%d)"
+            || git commit -m "chore: macro bias refresh $(date -u +%Y-%m-%d)"
           git push

@@ -1376,6 +1376,30 @@ function renderLevelAlert(alert, qqqPrice) {
     box.appendChild(row("Target on reversal", alert.target, alert.target.dist_nq > 0));
   }
 
+  // Confirmation hint — shown when Greeks don't fully stack
+  var conf  = alert.watched && alert.watched.confluence;
+  var hp    = alert.watched && alert.watched.hold_prob;
+  var hint  = null;
+  if (!conf && hp != null && hp < 0.55) {
+    hint = "Greeks partial — look for LVN or OTE entry confirmation";
+  } else if (!conf && hp != null && hp >= 0.55) {
+    hint = "Single-Greek lead — LVN or OTE adds conviction";
+  } else if (conf) {
+    hint = "Multi-Greek confluence ✓";
+  }
+  if (hint) {
+    var hintColor = conf ? "var(--bull)" : (hp != null && hp < 0.55 ? "var(--bear)" : "var(--muted)");
+    box.appendChild(el("div", {
+      style: {
+        fontSize: "11px",
+        color: hintColor,
+        padding: "4px 8px 2px",
+        fontStyle: "italic",
+        opacity: "0.85"
+      }
+    }, hint));
+  }
+
   return box;
 }
 

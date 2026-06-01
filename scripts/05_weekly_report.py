@@ -30,7 +30,7 @@ if os.path.exists(_cot_path):
     _last_cot_date = pd.to_datetime(_cot.iloc[:, 0]).dropna().max()
     _days_stale = (pd.Timestamp.now() - _last_cot_date).days
     if _days_stale > 9:
-        print(f"⚠ COT data is {_days_stale} days stale (last: {_last_cot_date.date()}).")
+        print(f"[!] COT data is {_days_stale} days stale (last: {_last_cot_date.date()}).")
         print("  Running 07_cot_features.py to refresh...")
         result = subprocess.run(
             [sys.executable, os.path.join(BASE_DIR, 'scripts', '07_cot_features.py')],
@@ -83,6 +83,8 @@ print(f"  NQ: {len(nq)} bars  {nq.index.min().date()} → {nq.index.max().date()
 print("\nPulling macro data...")
 
 def fred_fetch(series_id):
+    import time as _time
+    _time.sleep(0.5)
     url = "https://api.stlouisfed.org/fred/series/observations"
     r = requests.get(url, params={
         "series_id":         series_id,
