@@ -240,17 +240,49 @@ const _LR = {
 
 // Expected hold_prob for a wall with all-average Greek features at the given
 // time of day. Used by the frontend to set a time-adjusted display threshold.
+// Uses LR closed-form — XGB has no equivalent analytic baseline.
 function computeTimeBaseline(timeOfDayET) {
   const z = _LR.intercept
     + _LR.coef.time_of_day * (timeOfDayET - _LR.mean.time_of_day) / _LR.scale.time_of_day;
   return 1 / (1 + Math.exp(-z));
 }
 
+// ── XGBoost tree model (CV AUC 0.830) ────────────────────────────────────────
+// 300 trees, 27 features, same feature set as LR above.
+// Loaded at module init; computeHoldProb falls back to LR if absent.
+let _XGB = null;
+try { _XGB = require('../../../models/xgb_wall.json'); } catch (_) {}
+
+function _xgbTraverse(node, scaled) {
+  if ('leaf' in node) return node.leaf;
+  const val = scaled[node.split];
+  const goId = (val == null || val !== val)
+    ? node.missing
+    : val < node.split_condition ? node.yes : node.no;
+  const ch = node.children;
+  for (let i = 0; i < ch.length; i++) {
+    if (ch[i].nodeid === goId) return _xgbTraverse(ch[i], scaled);
+  }
+  return 0;
+}
+
+function _xgbPredict(raw) {
+  const feats = _XGB.features;
+  const scaled = {};
+  for (let i = 0; i < feats.length; i++) {
+    const f = feats[i];
+    scaled[f] = (raw[f] - _LR.mean[f]) / _LR.scale[f];
+  }
+  let score = 0;
+  const trees = _XGB.trees;
+  for (let i = 0; i < trees.length; i++) score += _xgbTraverse(trees[i], scaled);
+  return Math.round(1 / (1 + Math.exp(-score)) * 1000) / 1000;
+}
+
 // gammaFlip and futuresPrice are optional; when provided, enables in_neg_gamma
 // and wall_above_flip features which meaningfully improve the prediction.
 function computeHoldProb(level, volRegime, timeOfDayET, gammaFlip, futuresPrice) {
   const isPut   = (level.net_gex || 0) < 0;
-  const absGex  = Math.abs(level.net_gex || 0) + 1e-9;
   const distPct = level.dist_nq != null && (level.strike_futures || futuresPrice)
     ? level.dist_nq / (level.strike_futures || futuresPrice) * 100
     : 0;
@@ -277,6 +309,8 @@ function computeHoldProb(level, volRegime, timeOfDayET, gammaFlip, futuresPrice)
   raw.confluence       = (level.confluence != null) ? level.confluence : _LR.mean.confluence;
   raw.time_of_day      = timeOfDayET || _LR.mean.time_of_day;
   // vex_over_gex, charmex_over_gex, approach_vel, from_below, pd_*/pw_* stay at mean
+
+  if (_XGB) return _xgbPredict(raw);
 
   let z = _LR.intercept;
   for (const [feat, coef] of Object.entries(_LR.coef)) {

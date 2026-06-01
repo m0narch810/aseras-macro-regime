@@ -37,7 +37,7 @@ data, math, and surface in the dashboard.
 | 1 — Macro weekly | 10/13 = 76.9% (Feb-May 2026) | Significant vs 50% random (p=0.026); NOT significant vs 56.2% bull base rate (p=0.067) | Borderline; n=13 too small |
 | 2 — Intraday | Untested on outcomes | Theory-grounded (gamma regime: Dim 2025; entropy gate: regime-switching lit) | No — needs ≥30 days of labeled snapshots |
 | 3 — Levels score | Composite score AUC 0.53 (near-random) | Arbitrary regime-weight table, empirically unvalidated | No |
-| 3 — hold_prob | LR CV AUC 0.649 ± 0.002; XGBoost CV AUC 0.830 ± 0.002 | 511K touch events: QQQ 2025 + SPY 2020-2022 (4 regimes) | Directional signal; validated across bull/bear/high-vol |
+| 3 — hold_prob | XGBoost CV AUC 0.830 ± 0.002 (live); LR CV AUC 0.649 (fallback) | 511K touch events: QQQ 2025 + SPY 2020-2022 (4 regimes) | Directional signal; validated across bull/bear/high-vol |
 
 ---
 
@@ -221,10 +221,11 @@ Each component min-max normalized across nearby strikes. Weights come from a 3×
 indexed by (volRegime, gammaRegime). **This score has AUC 0.53 — near-random. Use `hold_prob` instead.**
 
 **`hold_prob`** — data-driven wall reliability, attached to every scored level:
-- Logistic regression on 511K touch events: QQQ 0DTE OPRA (Feb-Dec 2025) + SPY EOD (Jan 2020-Dec 2022)
-- LR CV AUC 0.649 ± 0.002; XGBoost CV AUC 0.830 ± 0.002 (not portable to JS)
-- Top features: `is_contraction` (#1 XGBoost), `is_high_vol`, `time_of_day`, `confluence`, `from_below`
-- Coefficients in `models/wall_score_intraday.json` — hardcoded in `_LR` object in `lib/options.js`
+- XGBoost on 511K touch events: QQQ 0DTE OPRA (Feb-Dec 2025) + SPY EOD (Jan 2020-Dec 2022)
+- XGBoost CV AUC 0.830 ± 0.002 (live); LR CV AUC 0.649 (fallback if `models/xgb_wall.json` absent)
+- Top features: `is_contraction` (#1), `is_high_vol`, `time_of_day`, `confluence`, `from_below`
+- Trees exported to `models/xgb_wall.json` (663 KB, committed); pure-JS traversal via `_xgbTraverse` in `lib/options.js`
+- LR coefficients remain in `_LR` object — used for LR fallback and `computeTimeBaseline` only
 - `_LR` has 27 features; features unavailable at inference time default to training means (zero contribution):
   `vex_over_gex`, `charmex_over_gex` (unit scale mismatch), `approach_vel`, `from_below` (touch-time only),
   all `pd_*` / `pw_*` volume profile features (require historical NQ 1m bars not available in function)
