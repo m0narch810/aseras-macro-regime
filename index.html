@@ -1295,27 +1295,30 @@ let _holdGreenThreshold = 55;
 // APPROACH_THRESHOLD: within this many NQ points → show "approaching" badge.
 const APPROACH_THRESHOLD = 40;
 
-// Directional bias panel: best CALL WALL above spot (short) + best PUT WALL
-// below spot (long), each ranked by hold_prob. Spot-price filter naturally
-// drops walls that have already been hit.
+// Directional bias panel: nearest CALL WALL above spot (short) + nearest PUT
+// WALL below spot (long). Nearest = most actionable. Weak walls (hold_prob < 0.40)
+// are excluded; if all candidates are weak, the filter is dropped so the panel
+// never goes blank.
+const MIN_BIAS_HOLD = 0.40;
+
 function buildBiasLevels(levels, nqPrice) {
   if (!levels || !levels.length || nqPrice == null) return null;
   const usable = levels.filter(function(l) { return l.dist_nq != null && l.hold_prob != null; });
   if (!usable.length) return null;
 
-  // Short: highest hold_prob CALL WALL still above spot
+  function nearest(cands) {
+    if (!cands.length) return null;
+    const strong = cands.filter(function(l) { return l.hold_prob >= MIN_BIAS_HOLD; });
+    const pool   = strong.length ? strong : cands;
+    return pool.slice().sort(function(a, b) { return Math.abs(a.dist_nq) - Math.abs(b.dist_nq); })[0];
+  }
+
+  // Short: nearest CALL WALL (net_gex > 0) above spot
   const shortCands = usable.filter(function(l) { return l.dist_nq > 0 && (l.net_gex || 0) > 0; });
-  const shortLevel = shortCands.length
-    ? shortCands.slice().sort(function(a, b) { return b.hold_prob - a.hold_prob; })[0]
-    : null;
+  // Long: nearest PUT WALL (net_gex < 0) below spot
+  const longCands  = usable.filter(function(l) { return l.dist_nq < 0 && (l.net_gex || 0) < 0; });
 
-  // Long: highest hold_prob PUT WALL still below spot
-  const longCands = usable.filter(function(l) { return l.dist_nq < 0 && (l.net_gex || 0) < 0; });
-  const longLevel = longCands.length
-    ? longCands.slice().sort(function(a, b) { return b.hold_prob - a.hold_prob; })[0]
-    : null;
-
-  return { shortLevel: shortLevel, longLevel: longLevel };
+  return { shortLevel: nearest(shortCands), longLevel: nearest(longCands) };
 }
 
 function renderBiasLevels(bias, qqqPrice) {
