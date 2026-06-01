@@ -1389,8 +1389,6 @@ function makeLvlRow(lvl) {
     lvl.strike_etf != null ? lvl.strike_etf.toFixed(2) : "—"));
   tr.appendChild(el("td", {style:{color:distColor}},
     dist != null ? fmtDist(dist) : "—"));
-  tr.appendChild(el("td", {style:{color:"var(--accent)",fontWeight:"500"}},
-    lvl.score != null ? lvl.score.toFixed(1) : "—"));
 
   var holdPct = lvl.hold_prob != null ? Math.round(lvl.hold_prob * 100) : null;
   var holdColor = holdPct == null ? "var(--muted)"
@@ -1417,7 +1415,6 @@ function makeLvlRow(lvl) {
 const LVL_COLS = [
   {key:"strike_etf",     lbl:"QQQ"},
   {key:"dist_nq",        lbl:"Dist"},
-  {key:"score",          lbl:"Score"},
   {key:"hold_prob",      lbl:"Hold %"},
   {key:"type",           lbl:"Type"},
   {key:"net_gex",        lbl:"GEX"},
