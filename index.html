@@ -867,6 +867,29 @@ footer .alph { color: rgba(255,255,255,0.55); }
   font-size: 11px; text-transform: uppercase;
 }
 
+.compression-zone {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 14px; margin: 10px 0 4px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 6px; font-size: 11px; font-family: 'Syne', sans-serif;
+}
+.cz-put  { color: var(--bull); font-weight: 700; }
+.cz-call { color: var(--bear); font-weight: 700; }
+.cz-arrow { color: var(--ghost); }
+.cz-range { color: var(--ghost); font-size: 10px; margin-left: 2px; }
+.cz-label { color: var(--ghost); font-size: 9px; letter-spacing: 0.1em;
+             text-transform: uppercase; margin-right: 4px; }
+.primary-badge {
+  display: inline-block; border-radius: 2px; padding: 1px 5px;
+  font-family: 'Syne', sans-serif; font-size: 7px; font-weight: 700;
+  letter-spacing: 0.08em; margin-right: 4px;
+  background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.18);
+  color: rgba(255,255,255,0.55);
+}
+.lvl-tbl2 tr.primary-row td,
+.lvl-full-tbl tr.primary-row td { background: rgba(255,255,255,0.025); }
+
 .strike-toggle {
   display: inline-flex; align-items: center;
   border: 1px solid var(--border); border-radius: 2px;
@@ -1378,6 +1401,7 @@ function renderBiasLevels(bias, qqqPrice) {
 // ── BUILD LEVEL ROW ───────────────────────────────
 function makeLvlRow(lvl) {
   const tr = el("tr");
+  if (lvl._isPrimary) tr.className = "primary-row";
   const gexColor = lvl.net_gex > 0 ? "var(--bear)" : lvl.net_gex < 0 ? "var(--bull)" : "var(--muted)";
   const vexColor = lvl.net_vex > 0 ? "var(--bear)" : lvl.net_vex < 0 ? "var(--bull)" : "var(--muted)";
   const dexColor = lvl.net_dex > 0 ? "var(--bull)" : lvl.net_dex < 0 ? "var(--bear)" : "var(--muted)";
@@ -1399,6 +1423,7 @@ function makeLvlRow(lvl) {
     holdPct != null ? holdPct + "%" : "—"));
 
   const ttd = el("td");
+  if (lvl._isPrimary) ttd.appendChild(el("span", {className:"primary-badge"}, "PRIMARY"));
   ttd.appendChild(el("span", {className:"type-tag " + typeTagClass(lvl.net_gex)},
     String(lvl.type || "—")));
   tr.appendChild(ttd);
@@ -1514,14 +1539,15 @@ function renderLevels(d) {
   hdr.appendChild(stat("QQQ",
     d.qqq_price != null ? d.qqq_price.toFixed(2) : "—"));
 
-  const regBadge = el("span", {className:"lvls-regime " + regimeClass(d.regime)},
-    String(d.regime || "—"));
+  const regBadge = el("span", {className:"lvls-regime " + regimeClass(d.vol_regime)},
+    String(d.vol_regime || "—"));
   hdr.appendChild(stat("Regime", regBadge));
 
-  const gfColor = (d.gamma_flip != null) ? "var(--mixed)" : "var(--ghost)";
+  const gfQqq = (d.gamma_flip != null && d.ratio) ? d.gamma_flip / d.ratio : null;
+  const gfColor = (gfQqq != null) ? "var(--mixed)" : "var(--ghost)";
   const gfSpan = el("span", {style:{color:gfColor, fontWeight:"700"}},
-    d.gamma_flip != null ? d.gamma_flip.toLocaleString("en-US", {minimumFractionDigits:1, maximumFractionDigits:1}) : "—");
-  hdr.appendChild(stat("γ Flip (NQ)", gfSpan));
+    gfQqq != null ? gfQqq.toFixed(2) : "—");
+  hdr.appendChild(stat("γ Flip", gfSpan));
 
   hdr.appendChild(stat("IV",
     d.iv != null ? d.iv.toFixed(1) + "%" : "—"));
@@ -1591,6 +1617,32 @@ function renderLevels(d) {
                            .sort(function(a, b) { return (b.hold_prob || 0) - (a.hold_prob || 0); });
   const resistance = levels.filter(function(l) { return l.net_gex > 0; })
                            .sort(function(a, b) { return (b.hold_prob || 0) - (a.hold_prob || 0); });
+
+  // Mark primary wall on each side (highest |net_gex| = most dealer hedging obligation)
+  var primaryCall = null, primaryPut = null;
+  levels.forEach(function(l) { l._isPrimary = false; });
+  levels.forEach(function(l) {
+    if (l.net_gex > 0 && (!primaryCall || Math.abs(l.net_gex) > Math.abs(primaryCall.net_gex)))
+      primaryCall = l;
+    if (l.net_gex <= 0 && (!primaryPut || Math.abs(l.net_gex) > Math.abs(primaryPut.net_gex)))
+      primaryPut = l;
+  });
+  if (primaryCall) primaryCall._isPrimary = true;
+  if (primaryPut)  primaryPut._isPrimary  = true;
+
+  // Compression zone — range between primary call and put walls
+  if (primaryCall && primaryPut) {
+    var rangeNq = Math.round(Math.abs(primaryCall.strike_futures - primaryPut.strike_futures));
+    var czEl = el("div", {className:"compression-zone"});
+    czEl.appendChild(el("span", {className:"cz-label"}, "Range"));
+    czEl.appendChild(el("span", {className:"cz-put"},
+      "PUT " + primaryPut.strike_etf.toFixed(2)));
+    czEl.appendChild(el("span", {className:"cz-arrow"}, "↔"));
+    czEl.appendChild(el("span", {className:"cz-call"},
+      "CALL " + primaryCall.strike_etf.toFixed(2)));
+    czEl.appendChild(el("span", {className:"cz-range"}, "· " + rangeNq + " NQ pts"));
+    app.appendChild(czEl);
+  }
 
   app.appendChild(secLbl("Gamma Panels"));
   const panels = el("div", {style:{display:"flex",flexDirection:"column",gap:"10px"}});
