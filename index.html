@@ -867,6 +867,58 @@ footer .alph { color: rgba(255,255,255,0.55); }
   font-size: 11px; text-transform: uppercase;
 }
 
+/* ── CONVICTION BADGES ───────────────────────────── */
+.conviction-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-left: 6px;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+.conviction-standalone {
+  color: var(--bull);
+  background: var(--bull-dim);
+  border: 1px solid var(--bull-b);
+}
+.conviction-confirm {
+  color: var(--mixed);
+  background: var(--mixed-dim);
+  border: 1px solid var(--mixed-b);
+}
+tr.non-dominant { opacity: 0.38; }
+
+/* ── HPS CHECKLIST ────────────────────────────────── */
+.hps-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 10px;
+  padding: 5px 8px 6px;
+  background: rgba(255,255,255,0.025);
+  border-radius: 4px;
+  margin: 0 0 2px;
+}
+.hps-cond {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+.hps-cond.pass { color: var(--bull); }
+.hps-cond.fail { color: var(--ghost); opacity: 0.50; }
+.hps-summary {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  font-weight: 600;
+  margin-top: 3px;
+  padding-top: 3px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
 .compression-zone {
   display: flex; align-items: center; gap: 6px;
   padding: 7px 14px; margin: 10px 0 4px;
@@ -1331,8 +1383,10 @@ function buildBiasLevels(levels, nqPrice) {
 
   function nearest(cands) {
     if (!cands.length) return null;
-    const strong = cands.filter(function(l) { return l.hold_prob >= MIN_BIAS_HOLD; });
-    const pool   = strong.length ? strong : cands;
+    const dominant = cands.filter(function(l) { return l.is_dominant; });
+    const base     = dominant.length ? dominant : cands;
+    const strong   = base.filter(function(l) { return l.hold_prob >= MIN_BIAS_HOLD; });
+    const pool     = strong.length ? strong : base;
     return pool.slice().sort(function(a, b) { return Math.abs(a.dist_nq) - Math.abs(b.dist_nq); })[0];
   }
 
@@ -1354,10 +1408,15 @@ function renderBiasLevels(bias, qqqPrice) {
     const arrow = dirAbove ? "▲" : "▼";
     const aColor = dirAbove ? "var(--bear)" : "var(--bull)";
     r.appendChild(el("span", {style:{color: aColor, fontWeight:"700"}}, arrow + " "));
-    r.appendChild(el("span", {className: "lvl-alert-main"},
+    var mainSpan = el("span", {className: "lvl-alert-main"},
       String(level.type || "WALL") + "  @  " +
-      (level.strike_etf != null ? "$" + level.strike_etf.toFixed(2) : "—")
-    ));
+      (level.strike_etf != null ? "$" + level.strike_etf.toFixed(2) : "—"));
+    r.appendChild(mainSpan);
+    if (level.conviction === "STANDALONE") {
+      r.appendChild(el("span", {className:"conviction-badge conviction-standalone"}, "Standalone"));
+    } else if (level.conviction === "CONFIRM") {
+      r.appendChild(el("span", {className:"conviction-badge conviction-confirm"}, "Needs Confirm"));
+    }
     const distQQQ = (level.strike_etf != null && qqqPrice != null)
       ? Math.abs(level.strike_etf - qqqPrice).toFixed(2)
       : null;
@@ -1373,17 +1432,40 @@ function renderBiasLevels(bias, qqqPrice) {
   }
 
   function hint(level) {
-    var conf = level && level.confluence;
-    var hp   = level && level.hold_prob;
-    var txt  = null, color = null;
-    if (conf) {
-      txt = "Multi-Greek confluence ✓"; color = "var(--bull)";
-    } else if (hp != null && hp >= 0.55) {
-      txt = "Single-Greek lead — LVN or OTE adds conviction"; color = "var(--muted)";
-    } else {
-      txt = "Greeks partial — look for LVN or OTE entry confirmation"; color = "var(--bear)";
+    var conds = level && level.hps_conditions;
+    var score = level && level.hps_score;
+    var label = level && level.hps_label;
+
+    if (!conds) {
+      // Fallback for API responses without HPS (shouldn't happen after deploy)
+      var conf  = level && level.confluence;
+      var hp    = level && level.hold_prob;
+      var txt, color;
+      if (conf)                     { txt = "Multi-Greek confluence ✓";                     color = "var(--bull)"; }
+      else if (hp != null && hp >= 0.55) { txt = "Single-Greek lead — LVN or OTE adds conviction"; color = "var(--muted)"; }
+      else                          { txt = "Greeks partial — look for LVN or OTE confirmation"; color = "var(--bear)"; }
+      return el("div", {style:{fontSize:"11px",color:color,padding:"0 8px 4px",fontStyle:"italic",opacity:"0.85"}}, txt);
     }
-    return el("div", {style:{fontSize:"11px",color:color,padding:"0 8px 4px",fontStyle:"italic",opacity:"0.85"}}, txt);
+
+    var condDefs = [
+      {key:"regime_positive",   lbl:"Positive Gamma"},
+      {key:"gtbr_inside",       lbl:"Within GTBR"},
+      {key:"dex_aligned",       lbl:"DEX Counter-Trend"},
+      {key:"charm_vanna",       lbl:"Charm / Vanna"},
+      {key:"magnitude_outlier", lbl:"GEX Outlier"},
+    ];
+    var grid = el("div", {className:"hps-grid"});
+    condDefs.forEach(function(c) {
+      var pass = conds[c.key];
+      var item = el("div", {className:"hps-cond " + (pass ? "pass" : "fail")});
+      item.appendChild(el("span", {style:{fontSize:"8px"}}, pass ? "●" : "○"));
+      item.appendChild(document.createTextNode(" " + c.lbl));
+      grid.appendChild(item);
+    });
+    var scoreColor = score >= 4 ? "var(--bull)" : score === 3 ? "var(--mixed)" : "var(--ghost)";
+    grid.appendChild(el("div", {className:"hps-summary", style:{color:scoreColor}},
+      "HPS " + (score || 0) + "/5 · " + (label || "LOW")));
+    return grid;
   }
 
   if (bias.shortLevel) {
@@ -1401,7 +1483,8 @@ function renderBiasLevels(bias, qqqPrice) {
 // ── BUILD LEVEL ROW ───────────────────────────────
 function makeLvlRow(lvl) {
   const tr = el("tr");
-  if (lvl._isPrimary) tr.className = "primary-row";
+  if (lvl._isPrimary)    tr.className = "primary-row";
+  if (!lvl.is_dominant)  tr.classList.add("non-dominant");
   const gexColor = lvl.net_gex > 0 ? "var(--bear)" : lvl.net_gex < 0 ? "var(--bull)" : "var(--muted)";
   const vexColor = lvl.net_vex > 0 ? "var(--bear)" : lvl.net_vex < 0 ? "var(--bull)" : "var(--muted)";
   const dexColor = lvl.net_dex > 0 ? "var(--bull)" : lvl.net_dex < 0 ? "var(--bear)" : "var(--muted)";
@@ -1422,6 +1505,17 @@ function makeLvlRow(lvl) {
   tr.appendChild(el("td", {style:{color:holdColor, fontWeight:"500"}},
     holdPct != null ? holdPct + "%" : "—"));
 
+  // HPS score dots: filled = condition met, open = not met
+  var hpsScore = lvl.hps_score;
+  var hpsLabel = lvl.hps_label;
+  var hpsColor = hpsLabel === "HIGH"   ? "var(--bull)"
+               : hpsLabel === "MEDIUM" ? "var(--mixed)"
+               : "var(--ghost)";
+  var hpsDots = hpsScore != null
+    ? Array.from({length: 5}, function(_, i) { return i < hpsScore ? "●" : "○"; }).join("")
+    : "—";
+  tr.appendChild(el("td", {style:{color:hpsColor, fontFamily:"'JetBrains Mono',monospace", fontSize:"9px", letterSpacing:"1px", fontWeight:"500"}}, hpsDots));
+
   const ttd = el("td");
   if (lvl._isPrimary) ttd.appendChild(el("span", {className:"primary-badge"}, "PRIMARY"));
   ttd.appendChild(el("span", {className:"type-tag " + typeTagClass(lvl.net_gex)},
@@ -1441,6 +1535,7 @@ const LVL_COLS = [
   {key:"strike_etf",     lbl:"QQQ"},
   {key:"dist_nq",        lbl:"Dist"},
   {key:"hold_prob",      lbl:"Hold %"},
+  {key:"hps_score",      lbl:"HPS"},
   {key:"type",           lbl:"Type"},
   {key:"net_gex",        lbl:"GEX"},
   {key:"net_vex",        lbl:"Vanna"},
@@ -1546,11 +1641,17 @@ function renderLevels(d) {
   const gfQqq = (d.gamma_flip != null && d.ratio) ? d.gamma_flip / d.ratio : null;
   const gfColor = (gfQqq != null) ? "var(--mixed)" : "var(--ghost)";
   const gfSpan = el("span", {style:{color:gfColor, fontWeight:"700"}},
-    gfQqq != null ? gfQqq.toFixed(2) : "—");
+    gfQqq != null ? Math.round(gfQqq).toString() : "—");
   hdr.appendChild(stat("γ Flip", gfSpan));
 
   hdr.appendChild(stat("IV",
     d.iv != null ? d.iv.toFixed(1) + "%" : "—"));
+
+  if (d.gtbr_pts != null) {
+    var gtbrSpan = el("span", {style:{color:"var(--mixed)", fontWeight:"600"}},
+      "±" + d.gtbr_pts + " pts");
+    hdr.appendChild(stat("GTBR", gtbrSpan));
+  }
 
   const rvColor = (d.rv_iv_ratio != null && d.rv_iv_ratio < 0.8)
     ? "var(--bull)" : "var(--bear)";

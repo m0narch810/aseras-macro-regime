@@ -236,10 +236,16 @@ These are the highest-quality walls; `hold_prob` is meaningfully higher on confl
 
 **Per-level fields from `scoreLevels`:**
 - `score` — composite magnitude rank (0-100)
-- `hold_prob` — data-driven reliability (0-1 sigmoid)
+- `hold_prob` — data-driven reliability (0-1 sigmoid); XGBoost primary, LR fallback
+- `hps_score` — mechanistic checklist count (0-5)
+- `hps_label` — `"HIGH"` (≥4) / `"MEDIUM"` (3) / `"LOW"` (0-2)
+- `hps_conditions` — `{regime_positive, gtbr_inside, dex_aligned, charm_vanna, magnitude_outlier}`
 - `type` — `"CALL WALL"` or `"PUT WALL"` + ` + VOL SENSITIVE` if `|VEX| / |GEX| > 2.0`
 - `wall_reaction` — tag from `classifyWallReaction(level)` (private reaction table)
 - `confluence` — boolean int (from FreeFlow data, not always populated)
+
+**Top-level fields added to `levels.js` response:**
+- `gtbr_pts` — expected remaining NQ range in points at time of request (same formula as `computeGTBR`)
 
 **`scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip)`** — signature takes
 `volRegime` and `gammaFlip` to pass through to `computeHoldProb`.
@@ -314,6 +320,13 @@ Published empirical references that inform generic constants in `lib/options.js`
 **Helpers in `lib/options.js`:**
 - `computeHoldProb(level, volRegime, timeOfDayET, gammaFlip, futuresPrice)` — logistic regression
   wall reliability (0-1); coefficients from `models/wall_score_intraday.json`
+- `computeGTBR(futuresPrice, iv, timeOfDayET)` — expected remaining NQ range in points;
+  full-day 1σ scaled by √(T_remaining/6.5); collapses toward expiry — key 0DTE insight
+- `computeHPS(level, futuresPrice, iv, gammaFlip, volRegime, protrusion, timeOfDayET)` — 5-condition
+  mechanistic checklist: `{score: 0-5, label: HIGH/MEDIUM/LOW, conditions: {regime_positive,
+  gtbr_inside, dex_aligned, charm_vanna, magnitude_outlier}}`; complements hold_prob
+- `scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip, iv)` — now takes optional
+  `iv` (6th arg); each level now includes `hps_score`, `hps_label`, `hps_conditions` fields
 - `currentHourET()` — returns current hour + minute/60 in ET; feeds `time_of_day` feature live
 - `classifyWallReaction(level)` — private reaction table → `wall_reaction` tag
 - `computeAggregateGreeks(strikeArr)` — sign triple + totals across the passed set
@@ -455,8 +468,9 @@ Requires `FRED_API_KEY` repo secret.
 - **Model artifacts must exist** — `05_weekly_report.py` loads `models/*.pkl` on import. Run
   `04_train_model.py` first if missing.
 - **FF_SESSION expires periodically** — update `.env`, GitHub repo secret, AND Netlify env var.
-- **`scoreLevels` signature** — takes `(strikes, weights, futuresPrice, volRegime, gammaFlip)`;
-  both callers (`levels.js` and `intraday.js`) must pass all five args.
+- **`scoreLevels` signature** — takes `(strikes, weights, futuresPrice, volRegime, gammaFlip, iv)`;
+  `iv` is optional (6th arg) but required to populate GTBR-dependent HPS conditions. Both callers
+  (`levels.js` and `intraday.js`) now pass all six args.
 
 ---
 

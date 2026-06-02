@@ -738,7 +738,7 @@ exports.handler = async (event) => {
     const levelsRegime = classifyVolRegime(iv, rvIvRatio);
     const weights      = getWeights(levelsRegime, gammaRegime);
 
-    const levels     = scoreLevels(strikes, weights, futuresPrice, levelsRegime, gammaFlip);
+    const levels     = scoreLevels(strikes, weights, futuresPrice, levelsRegime, gammaFlip, iv);
     const H_GEX_norm = computeHGEXNorm(levels);
     const topWall    = computeTopWall(levels, futuresPrice);
 

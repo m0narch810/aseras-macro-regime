@@ -375,7 +375,7 @@ function computeGammaFlip(strikes, futuresPrice) {
     for (const row of sorted)
       if (Math.abs(row.gex) < minAbs) { minAbs = Math.abs(row.gex); bestFlip = row.strike; }
   }
-  return bestFlip != null ? Math.round(bestFlip * 10) / 10 : null;
+  return bestFlip != null ? Math.round(bestFlip) : null;
 }
 
 // Min-max normalisation of absolute values for cross-metric scoring.
@@ -406,6 +406,64 @@ function computeProtrusion(values, windowHalf = 3) {
   return ratios.map(r => (r - mn) / (mx - mn));
 }
 
+// ── GTBR & HPS ───────────────────────────────────────────────────────────────
+
+// Gamma-Theta Breakeven Range: expected remaining price range in NQ points.
+// Full-day 1σ scaled by fraction of RTH remaining — critical for 0DTE because
+// a wall 120pts away at 9:30am is unreachable by 14:00 when GTBR has halved.
+// Returns null when iv or price unavailable.
+function computeGTBR(futuresPrice, iv, timeOfDayET) {
+  if (!futuresPrice || !iv || iv <= 0) return null;
+  const daily1sd = futuresPrice * (iv / 100) / Math.sqrt(252);
+  const tRemaining = Math.max(0, 16.0 - (timeOfDayET || 9.5)) / 6.5;
+  return daily1sd * (tRemaining > 0 ? Math.sqrt(tRemaining) : 1);
+}
+
+// 5-condition mechanistic checklist for a single wall.
+// Complements hold_prob (XGBoost, empirically trained) with transparent dealer
+// mechanics reasoning. Each condition maps to a specific obligation or flow.
+// protrusion: this level's gexProt score (0-1) from scoreLevels.
+// Returns { score: 0-5, label: 'HIGH'|'MEDIUM'|'LOW', conditions: {…} }
+function computeHPS(level, futuresPrice, iv, gammaFlip, volRegime, protrusion, timeOfDayET) {
+  const isPut = (level.net_gex || 0) < 0;
+
+  // 1. Positive gamma regime: spot above flip → dealers long gamma → walls hold
+  const regime_positive = (gammaFlip != null && futuresPrice != null)
+    ? futuresPrice > gammaFlip : false;
+
+  // 2. GTBR inside: wall is within expected remaining daily range → likely to be tested today
+  const gtbr = computeGTBR(futuresPrice, iv, timeOfDayET);
+  const gtbr_inside = (gtbr != null)
+    ? Math.abs(level.dist_nq || 0) <= gtbr : false;
+
+  // 3. DEX aligned: dealer delta obligation is counter-trend to spot approaching wall
+  //    Call wall: positive DEX → dealers net long delta → mechanically must sell into rallies
+  //    Put wall:  negative DEX → dealers net short delta → mechanically must buy dips
+  const dex_aligned = isPut
+    ? (level.net_dex || 0) < 0
+    : (level.net_dex || 0) > 0;
+
+  // 4. Charm/Vanna structural support
+  //    Charm: put wall + positive charm → OTM puts decay toward close, dealers unwind
+  //           short delta = structural bid; call wall: opposite for structural sell
+  //    Vanna pin: contraction vol + high vanna → IV drop reinforces pin at this strike
+  const charm_aligned = isPut
+    ? (level.net_charmex || 0) > 0
+    : (level.net_charmex || 0) < 0;
+  const vanna_pin = (volRegime === 'CONTRACTION') && (level.vex_norm || 0) > 50;
+  const charm_vanna = charm_aligned || vanna_pin;
+
+  // 5. GEX magnitude outlier: local spike vs 6-strike neighborhood
+  //    protrusion > 0.6 ≈ top ~35% of the chain = dominant local peak
+  const magnitude_outlier = (protrusion || 0) > 0.6;
+
+  const conditions = { regime_positive, gtbr_inside, dex_aligned, charm_vanna, magnitude_outlier };
+  const score = Object.values(conditions).filter(Boolean).length;
+  const label = score >= 4 ? 'HIGH' : score === 3 ? 'MEDIUM' : 'LOW';
+
+  return { score, label, conditions };
+}
+
 // Returns strikes within FILTER_PCT of futures price, with `strike_futures`
 // and `dist_nq` attached. Used by both scoreLevels (which then filters by
 // MIN_SCORE) and by callers that need the broader nearby set for aggregate
@@ -418,10 +476,24 @@ function nearbyStrikes(strikes, futuresPrice) {
     .filter(r => Math.abs(r.dist_nq / futuresPrice * 100) <= FILTER_PCT);
 }
 
+// Per-side non-maximum suppression. Walls already sorted score-desc.
+// Once a wall is selected, any subsequent wall within `separation` NQ pts
+// on the same side is suppressed — collapsing adjacent-strike clusters into
+// the single dominant level. Returns a Set of surviving strike_futures values.
+function _nmsWalls(walls, separation) {
+  const survivors = [];
+  for (const w of walls) {
+    if (!survivors.some(s => Math.abs(s.strike_futures - w.strike_futures) < separation))
+      survivors.push(w);
+  }
+  return new Set(survivors.map(s => s.strike_futures));
+}
+
 // Scores nearby strikes using regime-adjusted weights. Returns strikes above
 // MIN_SCORE sorted descending. Only strikes within FILTER_PCT of futures price.
 // volRegime and gammaFlip are passed through to computeHoldProb.
-function scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip) {
+// iv (optional) enables GTBR computation inside HPS; pass null/undefined to skip.
+function scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip, iv) {
   const nearby = nearbyStrikes(strikes, futuresPrice);
   if (!nearby.length) return [];
 
@@ -442,7 +514,6 @@ function scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip) {
       const volSens = Math.abs(r.net_vex) / (Math.abs(r.net_gex) + 1e-9);
       const base    = r.net_gex > 0 ? 'CALL WALL' : 'PUT WALL';
       const wall_reaction = classifyWallReaction(r);
-      // Attach normalised Greek fields so computeHoldProb can read them.
       const levelWithNorm = {
         ...r,
         gex_norm:     gexN[i]  * 100,
@@ -452,12 +523,16 @@ function scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip) {
         strike_futures: r.strike_futures,
       };
       const hold_prob = computeHoldProb(levelWithNorm, volRegime, timeET, gammaFlip, futuresPrice);
+      const hps = computeHPS(levelWithNorm, futuresPrice, iv, gammaFlip, volRegime, gexProt[i], timeET);
       return {
         strike_futures: Math.round(r.strike_futures * 10)  / 10,
         strike_etf:     Math.round(r.strike_etf     * 100) / 100,
         dist_nq:        Math.round(r.dist_nq        * 10)  / 10,
         score:          Math.round(score            * 10)  / 10,
         hold_prob,
+        hps_score:      hps.score,
+        hps_label:      hps.label,
+        hps_conditions: hps.conditions,
         type:           base + (volSens > 2.0 ? ' + VOL SENSITIVE' : ''),
         net_gex:        Math.round(r.net_gex),
         net_vex:        Math.round(r.net_vex),
@@ -470,6 +545,22 @@ function scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip) {
     })
     .filter(r => r.score >= MIN_SCORE)
     .sort((a, b) => b.score - a.score);
+
+  // NMS: ~3 QQQ strike intervals (≈0.6% of price). Collapses adjacent-strike
+  // clusters into a single dominant level per side, one per genuine price zone.
+  const sep         = futuresPrice * 0.006;
+  const dominantSet = new Set([
+    ..._nmsWalls(scored.filter(l => l.net_gex >  0), sep),
+    ..._nmsWalls(scored.filter(l => l.net_gex <= 0), sep),
+  ]);
+
+  return scored.map(l => {
+    const is_dominant = dominantSet.has(l.strike_futures);
+    const conviction  = is_dominant && l.hps_score >= 4 ? 'STANDALONE'
+                      : is_dominant && l.hps_score === 3 ? 'CONFIRM'
+                      : 'CONTEXT';
+    return { ...l, is_dominant, conviction };
+  });
 }
 
 // Maps IV / RV:IV ratio to a vol regime name string.
@@ -610,7 +701,7 @@ module.exports = {
   REGIME_WEIGHTS, AGENT_HEADERS, BASE_HEADERS,
   isAuthorized, fetchJson, httpGetJson, todayET, currentHourET, computeHoldProb, computeTimeBaseline,
   aggregateDataset, computeGammaFlip, normalizeAbs,
-  nearbyStrikes, scoreLevels,
+  nearbyStrikes, scoreLevels, computeGTBR, computeHPS,
   classifyVolRegime, getWeights,
   classifyWallReaction, computeAggregateGreeks, applyBiasTable,
   WALL_REACTION_DIR, BIAS_TAG_DIR, GAMMA_ASYMMETRY_RATIO, PINNING_REGIME_ACTIVE,

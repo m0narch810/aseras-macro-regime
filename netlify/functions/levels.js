@@ -1,7 +1,7 @@
 const {
   BASE_HEADERS, isAuthorized, fetchJson,
   todayET, currentHourET, aggregateDataset, computeGammaFlip, scoreLevels,
-  classifyVolRegime, getWeights, computeTimeBaseline,
+  classifyVolRegime, getWeights, computeTimeBaseline, computeGTBR,
 } = require('./lib/options');
 
 const SYMBOL   = 'QQQ';
@@ -80,7 +80,7 @@ exports.handler = async (event) => {
 
     const volRegime = classifyVolRegime(iv, rvIvRatio);
     const weights   = getWeights(volRegime, gammaRegime);
-    const levels    = scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip);
+    const levels    = scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip, iv);
 
     const updatedET = new Date().toLocaleString('en-US', {
       timeZone: 'America/New_York',
@@ -99,6 +99,7 @@ exports.handler = async (event) => {
         ratio:       Math.round(ratio        * 100) / 100,
         gamma_flip:    gammaFlip,
         gamma_regime:  gammaRegime,
+        gtbr_pts:      (function() { const g = computeGTBR(futuresPrice, iv, currentHourET()); return g != null ? Math.round(g) : null; })(),
         vol_regime:    volRegime,
         iv:          iv          != null ? Math.round(iv          * 10)   / 10   : null,
         rv_iv_ratio: rvIvRatio   != null ? Math.round(rvIvRatio   * 1000) / 1000 : null,
