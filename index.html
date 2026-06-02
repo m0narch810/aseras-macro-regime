@@ -867,6 +867,11 @@ footer .alph { color: rgba(255,255,255,0.55); }
   font-size: 11px; text-transform: uppercase;
 }
 
+/* ── GEX / OI DELTA INDICATORS ──────────────────── */
+.delta-up   { color: var(--bull);  font-size: 9px; margin-left: 3px; font-weight: 700; }
+.delta-down { color: var(--bear);  font-size: 9px; margin-left: 3px; font-weight: 700; }
+.delta-flat { color: var(--ghost); font-size: 9px; margin-left: 3px; }
+
 /* ── CONVICTION BADGES ───────────────────────────── */
 .conviction-badge {
   display: inline-block;
@@ -1362,7 +1367,8 @@ function typeTagClass(net_gex) {
 
 // ── LEVELS SORT STATE ─────────────────────────────
 const lvlSort = { col: "hold_prob", dir: "desc" };
-let _lvlData = null;
+let _lvlData      = null;
+let _prevLevels   = {};  // strike_futures → level from previous refresh
 // Dynamic green threshold: max(55, time_baseline_pct + 5). Updated each load.
 let _holdGreenThreshold = 55;
 
@@ -1463,8 +1469,13 @@ function renderBiasLevels(bias, qqqPrice) {
       grid.appendChild(item);
     });
     var scoreColor = score >= 4 ? "var(--bull)" : score === 3 ? "var(--mixed)" : "var(--ghost)";
-    grid.appendChild(el("div", {className:"hps-summary", style:{color:scoreColor}},
-      "HPS " + (score || 0) + "/5 · " + (label || "LOW")));
+    var summaryTxt = "HPS " + (score || 0) + "/5 · " + (label || "LOW");
+    if (level.delta_gex != null && level.net_gex !== 0) {
+      var dgPct = level.delta_gex / Math.abs(level.net_gex);
+      if      (dgPct < -0.08) summaryTxt += "  ·  ⚠ GEX declining";
+      else if (dgPct >  0.08) summaryTxt += "  ·  ↑ GEX building";
+    }
+    grid.appendChild(el("div", {className:"hps-summary", style:{color:scoreColor}}, summaryTxt));
     return grid;
   }
 
@@ -1522,12 +1533,31 @@ function makeLvlRow(lvl) {
     String(lvl.type || "—")));
   tr.appendChild(ttd);
 
-  tr.appendChild(el("td", {style:{color:gexColor}}, fmtGex(lvl.net_gex)));
+  // GEX with reinforcing/pulling delta arrow
+  var gexTd = el("td", {style:{color:gexColor}});
+  gexTd.appendChild(document.createTextNode(fmtGex(lvl.net_gex)));
+  if (lvl.delta_gex != null && lvl.net_gex !== 0) {
+    var dgPct = lvl.delta_gex / Math.abs(lvl.net_gex);
+    var dgCls = dgPct >  0.03 ? "delta-up" : dgPct < -0.03 ? "delta-down" : "delta-flat";
+    var dgSym = dgPct >  0.03 ? "↑" : dgPct < -0.03 ? "↓" : "·";
+    gexTd.appendChild(el("span", {className:dgCls}, dgSym));
+  }
+  tr.appendChild(gexTd);
+
   tr.appendChild(el("td", {style:{color:vexColor}}, fmtGex(lvl.net_vex)));
   tr.appendChild(el("td", {style:{color:dexColor}}, fmtGex(lvl.net_dex)));
   tr.appendChild(el("td", {style:{color:chmColor}}, fmtGex(lvl.net_charmex)));
-  tr.appendChild(el("td", {style:{color:"var(--muted)"}},
-    lvl.total_oi != null ? lvl.total_oi.toLocaleString() : "—"));
+
+  // OI with build/drain delta arrow
+  var oiTd = el("td", {style:{color:"var(--muted)"}});
+  oiTd.appendChild(document.createTextNode(lvl.total_oi != null ? lvl.total_oi.toLocaleString() : "—"));
+  if (lvl.delta_oi != null && lvl.total_oi > 0) {
+    var doPct = lvl.delta_oi / lvl.total_oi;
+    var doCls = doPct >  0.03 ? "delta-up" : doPct < -0.03 ? "delta-down" : "delta-flat";
+    var doSym = doPct >  0.03 ? "↑" : doPct < -0.03 ? "↓" : "·";
+    oiTd.appendChild(el("span", {className:doCls}, doSym));
+  }
+  tr.appendChild(oiTd);
   return tr;
 }
 
@@ -1892,7 +1922,7 @@ function startCountdownTimer() {
 }
 
 function loadLevels(dte) {
-  if (dte !== undefined) selectedLevelsDTE = dte;
+  if (dte !== undefined) { selectedLevelsDTE = dte; _prevLevels = {}; }
   const dteParam = selectedLevelsDTE != null ? "&dte=" + selectedLevelsDTE : "";
   fetch("/.netlify/functions/levels?_=" + Date.now() + dteParam, {
     method: "GET",
@@ -1905,6 +1935,19 @@ function loadLevels(dte) {
       return r.json();
     })
     .then(function(d) {
+      // Diff against previous snapshot — attach delta_gex / delta_oi per strike
+      if (d.levels && Object.keys(_prevLevels).length) {
+        d.levels.forEach(function(lvl) {
+          var prev = _prevLevels[lvl.strike_futures];
+          if (!prev) return;
+          lvl.delta_gex = lvl.net_gex   - prev.net_gex;
+          lvl.delta_oi  = lvl.total_oi  - prev.total_oi;
+        });
+      }
+      // Cache for next diff (keyed by strike_futures)
+      _prevLevels = {};
+      (d.levels || []).forEach(function(lvl) { _prevLevels[lvl.strike_futures] = lvl; });
+
       levelsLoaded     = true;
       lastLevelsUpdate = new Date();
       renderLevels(d);
