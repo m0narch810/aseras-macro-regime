@@ -386,6 +386,26 @@ function normalizeAbs(values) {
   return abs.map(v => (v - mn) / (mx - mn));
 }
 
+// Protrusion: how much each strike's |GEX| exceeds its local neighborhood mean.
+// Strikes are ordered by price (ascending) — guaranteed by Object.entries integer key ordering.
+// Returns 0-1 normalized values; 1 = dominant local peak, 0 = blends into surroundings.
+// Applied as a score multiplier: (0.25 + 0.75 * protrusion) so non-protruding strikes
+// get at most 25% of their raw score, true walls keep full credit.
+function computeProtrusion(values, windowHalf = 3) {
+  const abs = values.map(Math.abs);
+  const ratios = abs.map((v, i) => {
+    let sum = 0, n = 0;
+    for (let j = Math.max(0, i - windowHalf); j <= Math.min(abs.length - 1, i + windowHalf); j++) {
+      if (j !== i) { sum += abs[j]; n++; }
+    }
+    const localMean = n > 0 ? sum / n : 0;
+    return localMean < 1e-9 ? 1 : Math.min(v / (localMean + 1e-9), 6);
+  });
+  const mn = Math.min(...ratios), mx = Math.max(...ratios);
+  if (mx === mn) return ratios.map(() => 1);
+  return ratios.map(r => (r - mn) / (mx - mn));
+}
+
 // Returns strikes within FILTER_PCT of futures price, with `strike_futures`
 // and `dist_nq` attached. Used by both scoreLevels (which then filters by
 // MIN_SCORE) and by callers that need the broader nearby set for aggregate
@@ -410,13 +430,15 @@ function scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip) {
   const chmN = normalizeAbs(nearby.map(r => r.net_charmex));
   const oiN  = normalizeAbs(nearby.map(r => r.total_oi));
   const dagN = normalizeAbs(nearby.map(r => r.net_dag));
+  const gexProt = computeProtrusion(nearby.map(r => r.net_gex));
 
   const timeET = currentHourET();
 
   return nearby
     .map((r, i) => {
-      const score   = (gexN[i]*weights.gex + vexN[i]*weights.vex + chmN[i]*weights.charmex +
-                       oiN[i]*weights.oi   + dagN[i]*weights.dag) * 100;
+      const rawScore = (gexN[i]*weights.gex + vexN[i]*weights.vex + chmN[i]*weights.charmex +
+                        oiN[i]*weights.oi   + dagN[i]*weights.dag) * 100;
+      const score = rawScore * (0.25 + 0.75 * gexProt[i]);
       const volSens = Math.abs(r.net_vex) / (Math.abs(r.net_gex) + 1e-9);
       const base    = r.net_gex > 0 ? 'CALL WALL' : 'PUT WALL';
       const wall_reaction = classifyWallReaction(r);
