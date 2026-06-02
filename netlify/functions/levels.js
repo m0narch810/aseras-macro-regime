@@ -54,10 +54,9 @@ exports.handler = async (event) => {
     let iv = null, rvIvRatio = null, hv21 = null, volError = null;
     try {
       const vol = await fetchJson(`${BASE_URL}/vol/realized?symbol=${SYMBOL}`, cookie);
-      iv          = vol.current_iv  ?? vol.iv          ?? null;
-      rvIvRatio   = vol.rv_iv_ratio ?? vol.rv_iv       ?? null;
-      hv21        = vol.hv21        ?? vol.hv_21       ?? null;
-      if (iv == null && rvIvRatio == null) volError = 'fields_missing:' + Object.keys(vol).join(',');
+      iv          = vol.current_iv  ?? null;
+      rvIvRatio   = vol.rv_iv_ratio ?? null;
+      hv21        = vol.hv21        ?? null;
     } catch (e) {
       volError = e.message;
     }
