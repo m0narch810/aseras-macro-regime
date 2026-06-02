@@ -1660,9 +1660,17 @@ function renderLevels(d) {
   hdr.appendChild(stat("RV/IV", rvSpan));
 
   hdr.appendChild(stat("HV21",
-    d.iv != null ? d.hv21.toFixed(1) + "%" : "—"));
+    d.hv21 != null ? d.hv21.toFixed(1) + "%" : "—"));
 
   app.appendChild(hdr);
+
+  if (d.vol_error) {
+    app.appendChild(el("div", {style:{
+      fontSize:"9px", color:"var(--bear)", padding:"3px 8px",
+      background:"var(--bear-dim)", borderRadius:"3px", marginBottom:"6px",
+      letterSpacing:"0.04em",
+    }}, "vol endpoint: " + d.vol_error));
+  }
 
   // ── HIGH-VOL WARNING BANNER ──
   if (d.vol_regime === "EXPANSION") {

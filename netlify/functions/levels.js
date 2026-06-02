@@ -51,13 +51,16 @@ exports.handler = async (event) => {
       if (!found) throw new Error('No options data for 0DTE, 1DTE, or 2DTE — FF_SESSION may be expired.');
     }
 
-    let iv = null, rvIvRatio = null, hv21 = null;
+    let iv = null, rvIvRatio = null, hv21 = null, volError = null;
     try {
       const vol = await fetchJson(`${BASE_URL}/vol/realized?symbol=${SYMBOL}`, cookie);
-      iv          = vol.current_iv  ?? null;
-      rvIvRatio   = vol.rv_iv_ratio ?? null;
-      hv21        = vol.hv21        ?? null;
-    } catch (_) {}
+      iv          = vol.current_iv  ?? vol.iv          ?? null;
+      rvIvRatio   = vol.rv_iv_ratio ?? vol.rv_iv       ?? null;
+      hv21        = vol.hv21        ?? vol.hv_21       ?? null;
+      if (iv == null && rvIvRatio == null) volError = 'fields_missing:' + Object.keys(vol).join(',');
+    } catch (e) {
+      volError = e.message;
+    }
 
     const { strikes, futuresPrice, spotEtf, ratio } = aggregateDataset(data);
 
@@ -104,6 +107,7 @@ exports.handler = async (event) => {
         iv:          iv          != null ? Math.round(iv          * 10)   / 10   : null,
         rv_iv_ratio: rvIvRatio   != null ? Math.round(rvIvRatio   * 1000) / 1000 : null,
         hv21:        hv21        != null ? Math.round(hv21        * 10)   / 10   : null,
+        vol_error:   volError,
         levels,
         time_baseline: computeTimeBaseline(currentHourET()),
       }),
