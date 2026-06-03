@@ -1498,8 +1498,8 @@ function renderBiasLevels(bias, qqqPrice) {
       var dgPct  = level.delta_gex / Math.abs(level.net_gex);
       var streak = (level.gex_streak && level.gex_streak.count >= 2)
         ? " (" + level.gex_streak.count + " refreshes)" : "";
-      if      (dgPct < -0.08) summaryTxt += "  ·  ⚠ GEX fading" + streak;
-      else if (dgPct >  0.08) summaryTxt += "  ·  ↑ GEX building" + streak;
+      if      (dgPct < -0.04) summaryTxt += "  ·  ⚠ GEX fading" + streak;
+      else if (dgPct >  0.04) summaryTxt += "  ·  ↑ GEX building" + streak;
     }
     grid.appendChild(el("div", {className:"hps-summary", style:{color:scoreColor}}, summaryTxt));
     return grid;
@@ -1564,8 +1564,8 @@ function makeLvlRow(lvl) {
   gexTd.appendChild(document.createTextNode(fmtGex(lvl.net_gex)));
   if (lvl.delta_gex != null && lvl.net_gex !== 0) {
     var dgPct = lvl.delta_gex / Math.abs(lvl.net_gex);
-    var dgCls = dgPct >  0.03 ? "delta-up" : dgPct < -0.03 ? "delta-down" : "delta-flat";
-    var dgSym = dgPct >  0.03 ? "↑" : dgPct < -0.03 ? "↓" : "·";
+    var dgCls = dgPct >  0.015 ? "delta-up" : dgPct < -0.015 ? "delta-down" : "delta-flat";
+    var dgSym = dgPct >  0.015 ? "↑" : dgPct < -0.015 ? "↓" : "·";
     gexTd.appendChild(el("span", {className:dgCls}, dgSym));
     // consecutive refreshes moving the same way → e.g. "↑x3" = building 3 refreshes straight
     if (lvl.gex_streak && lvl.gex_streak.count >= 2) {
@@ -1583,8 +1583,8 @@ function makeLvlRow(lvl) {
   oiTd.appendChild(document.createTextNode(lvl.total_oi != null ? lvl.total_oi.toLocaleString() : "—"));
   if (lvl.delta_oi != null && lvl.total_oi > 0) {
     var doPct = lvl.delta_oi / lvl.total_oi;
-    var doCls = doPct >  0.03 ? "delta-up" : doPct < -0.03 ? "delta-down" : "delta-flat";
-    var doSym = doPct >  0.03 ? "↑" : doPct < -0.03 ? "↓" : "·";
+    var doCls = doPct >  0.015 ? "delta-up" : doPct < -0.015 ? "delta-down" : "delta-flat";
+    var doSym = doPct >  0.015 ? "↑" : doPct < -0.015 ? "↓" : "·";
     oiTd.appendChild(el("span", {className:doCls}, doSym));
   }
   tr.appendChild(oiTd);
@@ -2088,7 +2088,7 @@ function attachDeltas(d) {
       lvl.delta_gex = lvl.net_gex  - prev.net_gex;
       lvl.delta_oi  = lvl.total_oi - prev.total_oi;
       const pct = prev.net_gex !== 0 ? lvl.delta_gex / Math.abs(prev.net_gex) : 0;
-      const dir = pct > 0.03 ? 1 : pct < -0.03 ? -1 : 0;
+      const dir = pct > 0.015 ? 1 : pct < -0.015 ? -1 : 0;
       const s   = _gexStreak[lvl.strike_futures];
       _gexStreak[lvl.strike_futures] = (dir !== 0 && s && s.dir === dir)
         ? { dir: dir, count: s.count + 1 }
