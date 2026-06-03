@@ -506,7 +506,7 @@ function scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip, iv) {
 
   const timeET = currentHourET();
 
-  return nearby
+  const scored = nearby
     .map((r, i) => {
       const rawScore = (gexN[i]*weights.gex + vexN[i]*weights.vex + chmN[i]*weights.charmex +
                         oiN[i]*weights.oi   + dagN[i]*weights.dag) * 100;
