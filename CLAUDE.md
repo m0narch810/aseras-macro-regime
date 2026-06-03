@@ -25,7 +25,7 @@ data, math, and surface in the dashboard.
 │  LAYER 3 — LEVELS SCORING (live, every ~5 min)                          │
 │  netlify/functions/levels.js (handler) + lib/options.js (math)          │
 │  Per-strike GEX/VEX/CharmEX/DAG/OI scoring, vol×gamma regime weights    │
-│  hold_prob: data-driven wall reliability (511K touch events, multi-regime) │
+│  hold_prob: mechanical wall reliability (dealer-mechanics formula, no fitting) │
 │  Surface: dashboard #levels tab, /.netlify/functions/levels             │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -37,7 +37,7 @@ data, math, and surface in the dashboard.
 | 1 — Macro weekly | 10/13 = 76.9% (Feb-May 2026) | Significant vs 50% random (p=0.026); NOT significant vs 56.2% bull base rate (p=0.067) | Borderline; n=13 too small |
 | 2 — Intraday | Untested on outcomes | Theory-grounded (gamma regime: Dim 2025; entropy gate: regime-switching lit) | No — needs ≥30 days of labeled snapshots |
 | 3 — Levels score | Composite score AUC 0.53 (near-random) | Arbitrary regime-weight table, empirically unvalidated | No |
-| 3 — hold_prob | XGBoost CV AUC 0.830 ± 0.002 (live); LR CV AUC 0.649 (fallback) | 511K touch events: QQQ 2025 + SPY 2020-2022 (4 regimes) | Directional signal; validated across bull/bear/high-vol |
+| 3 — hold_prob | Not backtested (by design) | Theory-grounded: dealer-mechanics reliability formula (gamma regime, GTBR inelasticity, hedge polarity, skew, pinning) | No — mechanistic prior, awaiting forward-test validation |
 
 ---
 
@@ -218,25 +218,37 @@ score = (gex_norm * w_gex + vex_norm * w_vex + charmex_norm * w_charmex
        + oi_norm * w_oi + dag_norm * w_dag) × 100
 ```
 Each component min-max normalized across nearby strikes. Weights come from a 3×3 table
-indexed by (volRegime, gammaRegime). **This score has AUC 0.53 — near-random. Use `hold_prob` instead.**
+indexed by (volRegime, gammaRegime). **Empirically unvalidated magnitude rank — use `hold_prob` for reliability.**
 
-**`hold_prob`** — data-driven wall reliability, attached to every scored level:
-- XGBoost on 511K touch events: QQQ 0DTE OPRA (Feb-Dec 2025) + SPY EOD (Jan 2020-Dec 2022)
-- XGBoost CV AUC 0.830 ± 0.002 (live); LR CV AUC 0.649 (fallback if `models/xgb_wall.json` absent)
-- Top features: `is_contraction` (#1), `is_high_vol`, `time_of_day`, `confluence`, `from_below`
-- Trees exported to `models/xgb_wall.json` (663 KB, committed); pure-JS traversal via `_xgbTraverse` in `lib/options.js`
-- LR coefficients remain in `_LR` object — used for LR fallback and `computeTimeBaseline` only
-- `_LR` has 27 features; features unavailable at inference time default to training means (zero contribution):
-  `vex_over_gex`, `charmex_over_gex` (unit scale mismatch), `approach_vel`, `from_below` (touch-time only),
-  all `pd_*` / `pw_*` volume profile features (require historical NQ 1m bars not available in function)
-- To retrain: run OPRA + SPY pipelines, then `fit_intraday_wall_model.py --combined`, then copy `_LR` from JSON
+**`hold_prob`** — mechanical Wall-Hold Reliability (R), attached to every scored level.
+Derived purely from options-dealer mechanics — **no historical backtest fitting** (the prior
+QQQ+SPY 511K-touch-event LR/XGBoost model was removed; that data was not predictive):
+```
+R = cap( B_regime × P × O × A_dex × PCR × S_skew × F_term × F_vrp × F_gtbr × G_pin , 1.0)
+```
+- `B_regime` — global gamma baseline (the ONLY place long/short gamma enters): spot > flip → 0.5,
+  spot < flip → 0.1, flip unknown → 0.3
+- `P` — protrusion 0–1 mapped to 0.5–1.5 (dominant local node)
+- `O` — one-sidedness `|GEX|/ag` mapped to 0.85–1.15 (decisive vs offsetting dealer gamma)
+- `A_dex` — hedge polarity: counter-trend DEX (above spot & DEX>0, or below spot & DEX<0) ×1.25,
+  pro-trend ×0.5 (acceleration zone)
+- `PCR` — dominant-side OI asymmetry `max(call_oi,put_oi)/(call_oi+put_oi)` → 0.9–1.1
+- `S_skew` — `|strike_iv − ATM| / ATM > 0.20` → ×1.15 (side-aware skew intensity)
+- `F_term` — `hv5/hv63 > 1.25` → ×0.85 (short-vol spike weakens walls); no-op if hv absent
+- `F_vrp` — `rv_iv_ratio < 0.5` → ×1.15 (rich VRP favors mean-reversion); no-op if absent
+- `F_gtbr` — `|dist| > GTBR` → ×0.2 (inelastic momentum breaks through)
+- `G_pin` — time > 14:00 ET & DAG in top decile of nearby strikes → ×1.25 (late pinning magnet)
+- Sign convention: `net_gex > 0` = call-dominated (call wall), `< 0` = put-dominated (put wall) —
+  NOT dealer long/short gamma. Long/short gamma is captured only by `B_regime`.
+- All inputs come live from FreeFlow; the formula is in `computeHoldProb(level, ctx)` in `lib/options.js`.
+  No model artifact required.
 
 **`confluence`** — 1 when GEX_norm + VEX_norm + CharmEX_norm all ≥ 40 at the same strike.
 These are the highest-quality walls; `hold_prob` is meaningfully higher on confluence=1 walls.
 
 **Per-level fields from `scoreLevels`:**
 - `score` — composite magnitude rank (0-100)
-- `hold_prob` — data-driven reliability (0-1 sigmoid); XGBoost primary, LR fallback
+- `hold_prob` — mechanical Wall-Hold Reliability R (0-1); pure dealer-mechanics formula, no fitting
 - `hps_score` — mechanistic checklist count (0-5)
 - `hps_label` — `"HIGH"` (≥4) / `"MEDIUM"` (3) / `"LOW"` (0-2)
 - `hps_conditions` — `{regime_positive, gtbr_inside, dex_aligned, charm_vanna, magnitude_outlier}`
@@ -318,8 +330,9 @@ Published empirical references that inform generic constants in `lib/options.js`
 - Garmash 2024 — gamma regime ↔ mean-reversion/momentum mapping
 
 **Helpers in `lib/options.js`:**
-- `computeHoldProb(level, volRegime, timeOfDayET, gammaFlip, futuresPrice)` — logistic regression
-  wall reliability (0-1); coefficients from `models/wall_score_intraday.json`
+- `computeHoldProb(level, ctx)` — mechanical Wall-Hold Reliability R (0-1); pure dealer-mechanics
+  formula (see Layer 3 section), no fitting. `ctx = {gammaFlip, futuresPrice, timeOfDayET, atmIv,
+  rvIvRatio, hvTermRatio, gtbr, dagDecileThr}`, assembled once per request by `scoreLevels`
 - `computeGTBR(futuresPrice, iv, timeOfDayET)` — expected remaining NQ range in points;
   full-day 1σ scaled by √(T_remaining/6.5); collapses toward expiry — key 0DTE insight
 - `computeHPS(level, futuresPrice, iv, gammaFlip, volRegime, protrusion, timeOfDayET)` — 5-condition
@@ -415,21 +428,17 @@ Requires `FRED_API_KEY` repo secret.
 ## Edge & Calibration Status
 
 **Empirically validated:**
-- `hold_prob` model: LR CV AUC 0.649, XGBoost CV AUC 0.830 on 511K events (QQQ 2025 + SPY 2020-2022)
-- Multi-regime validated: 2020 COVID crash, 2021 bull, 2022 bear, 2025 bull
-- Strongest signals: `is_contraction` (#1 XGBoost), `is_high_vol`, `time_of_day`, `confluence`
-- CONTRACTION vol: 67.8% hold rate; EXPANSION: 46.8%; NEUTRAL: 54.9%
-- Time-of-day: afternoon (14-16 ET) 57% hold vs open (9:30-10:30) 42%
-- PUT walls outperform CALL walls (51% vs 47% combined dataset)
 - Gamma regime → vol regime mapping (Dim/Eraker/Vilkov 2025)
 - Modern SPX in amplification not pinning regime (Elms 2026)
 - Macro weekly hit rate 76.9% (13 weeks; significant vs random, NOT vs bull base rate)
 
-**Known limitations of hold_prob:**
-- "HELD" = price didn't blast through in 30 min — not a profitable trade guarantee
-- EOD SPY walls have 85.6% hold rate (structural EOD levels) vs QQQ intraday 48.5%
-- time_of_day signal is partially an artifact of the 30-min label window (afternoon has less time to break)
-- limit_order_backtest showed max 43% win rate at 3:1 RR — wall holds ≠ profitable reversals
+**`hold_prob` (mechanical R) — theory-grounded, NOT yet validated on outcomes:**
+- Pure dealer-mechanics formula (gamma regime, GTBR inelasticity, hedge polarity, one-sidedness,
+  skew, late pinning). No backtest fitting — the prior QQQ+SPY touch-event model was removed.
+- Each factor is mechanically motivated but the multipliers/thresholds are reasoned priors, not
+  calibrated against realized hold rates. Needs forward-tested labeled snapshots to validate.
+- Known soft spot: `B_regime` is a hard step at the gamma flip (0.5 vs 0.1) — near-flip snapshots
+  swing ~5×. Consider a NEAR_FLIP midpoint (0.3) using the `gammaRegime` band from `levels.js`.
 
 **Theory-grounded but uncalibrated:**
 - Composite `score` (REGIME_WEIGHTS 3×3 grid) — AUC 0.53, near-random on 0DTE data
@@ -444,8 +453,9 @@ Requires `FRED_API_KEY` repo secret.
 **Known data limitations:**
 - OPRA CBBO uses quote size as OI proxy — underestimates true dealer exposure vs FreeFlow live data
 - SPY EOD pipeline uses volume as OI proxy (resets daily) — weaker proxy than OPRA quote size
-- `vex_over_gex` and `charmex_over_gex` have different unit scales in OPRA vs FreeFlow — excluded from live `computeHoldProb`
-- VP features (pd_on_hvn, pw_on_lvn, etc.) require historical NQ 1m bars — can't be computed in Netlify function, default to training means
+- The OPRA/SPY backtest pipeline (`fit_intraday_wall_model.py`, `models/xgb_wall.json`,
+  `wall_score_intraday.*`) is **no longer wired into production** — `hold_prob` is now the mechanical
+  formula in `computeHoldProb`. The scripts/artifacts remain on disk but are vestigial.
 
 ---
 
@@ -455,9 +465,9 @@ Requires `FRED_API_KEY` repo secret.
   options-flow + entropy/PCA; Layer 3 is per-strike scoring. Each has its own update cadence.
 - **Python intraday script is NOT canonical** — `intraday.js` is the production path. Python is
   for hindcasting only.
-- **`hold_prob` coefficients must not be hand-tuned** — update only by retraining via the OPRA + SPY
-  pipeline. Source of truth is `models/wall_score_intraday.json`; hardcode into `_LR` in `options.js`.
-  The `_LR` object has 27 features; all unavailable at inference time default to their training means.
+- **`hold_prob` is a mechanical formula, not a fitted model** — edit the multipliers/thresholds in
+  `computeHoldProb` directly (they're reasoned dealer-mechanics priors). There is no `_LR`/XGBoost
+  model in the production path anymore. Keep long/short-gamma logic confined to `B_regime`.
 - **Windows encoding** — scripts with Unicode characters (→ ✓ ⚠) will crash on cp1252. Prefix with
   `$env:PYTHONIOENCODING="utf-8";` in PowerShell or run with `python -u`.
 - **Large CSVs are gitignored** — `intraday_touches.csv`, `spy_touches.csv`, `reversal_backtest.csv`,
@@ -468,9 +478,10 @@ Requires `FRED_API_KEY` repo secret.
 - **Model artifacts must exist** — `05_weekly_report.py` loads `models/*.pkl` on import. Run
   `04_train_model.py` first if missing.
 - **FF_SESSION expires periodically** — update `.env`, GitHub repo secret, AND Netlify env var.
-- **`scoreLevels` signature** — takes `(strikes, weights, futuresPrice, volRegime, gammaFlip, iv)`;
-  `iv` is optional (6th arg) but required to populate GTBR-dependent HPS conditions. Both callers
-  (`levels.js` and `intraday.js`) now pass all six args.
+- **`scoreLevels` signature** — `(strikes, weights, futuresPrice, volRegime, gammaFlip, iv, volCtx)`.
+  `iv` (6th) feeds GTBR + skew; `volCtx` (7th, optional) = `{rvIvRatio, hv5, hv63}` enables the VRP +
+  term-structure filters in `computeHoldProb`. `levels.js` passes all seven; `intraday.js` omits
+  `volCtx` (those filters no-op).
 
 ---
 
@@ -478,7 +489,8 @@ Requires `FRED_API_KEY` repo secret.
 
 - **Don't tune uncalibrated thresholds without data** — constants in "theory-grounded but
   uncalibrated" above stay frozen until labeled outcomes provide stratified hit rates.
-- **Don't change `_LR` coefficients by hand** — retrain via the OPRA pipeline.
+- **`hold_prob` is a mechanical formula** — tune its multipliers in `computeHoldProb` directly; there
+  is no fitted model to retrain. Keep long/short-gamma logic only in `B_regime`.
 - **Don't conflate layers** — a fix to bias-table logic doesn't touch the XGBoost pipeline.
 - **Update CLAUDE.md when adding helpers** — this file is the single source of truth for
   navigating the codebase. New functions in `lib/options.js` belong in the helpers section.

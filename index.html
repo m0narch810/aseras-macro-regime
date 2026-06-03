@@ -1867,6 +1867,7 @@ let _levelsAbort         = null; // AbortController of the in-flight request (ca
 let _prevLevelsDTE       = null; // which expiry _prevLevels belongs to (avoids cross-expiry deltas)
 let _gexStreak           = {};   // strike_futures → {dir,count}: consecutive-refresh GEX trend
 let _baselineTime        = null; // timestamp of the snapshot _prevLevels was captured from
+let _firstLoadRetries    = 0;    // cold-start retry budget for the very first levels load
 
 // Immediately reflect the pending expiry selection on the picker buttons
 // (the picker is otherwise only rebuilt when a fetch resolves, which feels frozen).
@@ -2025,6 +2026,14 @@ function loadLevels(dte) {
       markDtePending(false);
       showLevelsError(msg || "Could not load that expiry.");
     } else if (!levelsLoaded) {
+      // First-ever load failed — usually a cold FreeFlow/function. Retry quietly a
+      // couple of times before showing the await state, so cold starts self-heal
+      // instead of flashing "no data".
+      if (_firstLoadRetries < 2) {
+        _firstLoadRetries++;
+        setTimeout(function() { if (!levelsLoaded) loadLevels(); }, 2500);
+        return;
+      }
       const app = document.getElementById("levels-app");
       if (app) { clearEl(app); app.appendChild(el("div", {className:"lvl-await"}, "Awaiting data…")); }
     } else {
@@ -2051,6 +2060,7 @@ function loadLevels(dte) {
       // levels.js returns {error:true} with HTTP 200 when the upstream fetch fails —
       // treat it as a failure, not as empty data, so we don't blank the tab.
       if (!d || d.error || !Array.isArray(d.levels)) { onFailure(d && d.message); return; }
+      _firstLoadRetries = 0;  // healthy response — reset the cold-start retry budget
       attachDeltas(d);
       levelsLoaded     = true;
       lastLevelsUpdate = new Date();

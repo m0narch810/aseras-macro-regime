@@ -1,7 +1,7 @@
 const {
   BASE_HEADERS, isAuthorized, fetchJson,
   todayET, currentHourET, aggregateDataset, computeGammaFlip, scoreLevels,
-  classifyVolRegime, getWeights, computeTimeBaseline, computeGTBR,
+  classifyVolRegime, getWeights, computeGTBR,
 } = require('./lib/options');
 
 const SYMBOL   = 'QQQ';
@@ -50,7 +50,8 @@ exports.handler = async (event) => {
       for (let dte = 0; dte <= 2; dte++) {
         const exp = dte === 0 ? today : addDays(today, dte);
         try {
-          const d = await fetchJson(`${BASE_URL}/futures-levels?symbol=${SYMBOL}&exp=${exp}`, cookie);
+          // Shorter per-probe timeout: three sequential tries must fit Netlify's 10s budget.
+          const d = await fetchJson(`${BASE_URL}/futures-levels?symbol=${SYMBOL}&exp=${exp}`, cookie, 4500);
           if (d.rows && d.rows.length) { data = d; activeExp = exp; activeDTE = dte; found = true; break; }
         } catch (_) {}
       }
@@ -58,16 +59,20 @@ exports.handler = async (event) => {
     }
 
     let iv = null, rvIvRatio = null, hv21 = null, volError = null;
+    let hv5 = null, hv10 = null, hv63 = null;
     const volRes = await volPromise;
     if (volRes.err) {
       volError = volRes.err;
     } else {
       iv          = volRes.v.current_iv  ?? null;
       rvIvRatio   = volRes.v.rv_iv_ratio ?? null;
+      hv5         = volRes.v.hv5         ?? null;
+      hv10        = volRes.v.hv10        ?? null;
       hv21        = volRes.v.hv21        ?? null;
+      hv63        = volRes.v.hv63        ?? null;
     }
 
-    const { strikes, futuresPrice, spotEtf, ratio } = aggregateDataset(data);
+    const { strikes, futuresPrice, spotEtf, ratio, bookGex, bookDex } = aggregateDataset(data);
 
     // Compute flip + gamma regime first so weights can use both axes.
     const gammaFlip   = computeGammaFlip(strikes, futuresPrice);
@@ -88,7 +93,8 @@ exports.handler = async (event) => {
 
     const volRegime = classifyVolRegime(iv, rvIvRatio);
     const weights   = getWeights(volRegime, gammaRegime);
-    const levels    = scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip, iv);
+    const levels    = scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip, iv,
+                                  { rvIvRatio, hv5, hv63 });
 
     const updatedET = new Date().toLocaleString('en-US', {
       timeZone: 'America/New_York',
@@ -107,14 +113,18 @@ exports.handler = async (event) => {
         ratio:       Math.round(ratio        * 100) / 100,
         gamma_flip:    gammaFlip,
         gamma_regime:  gammaRegime,
+        book_gex:      bookGex != null ? Math.round(bookGex) : null,
+        book_dex:      bookDex != null ? Math.round(bookDex) : null,
         gtbr_pts:      (function() { const g = computeGTBR(futuresPrice, iv, currentHourET()); return g != null ? Math.round(g) : null; })(),
         vol_regime:    volRegime,
         iv:          iv          != null ? Math.round(iv          * 10)   / 10   : null,
         rv_iv_ratio: rvIvRatio   != null ? Math.round(rvIvRatio   * 1000) / 1000 : null,
+        hv5:         hv5         != null ? Math.round(hv5         * 10)   / 10   : null,
+        hv10:        hv10        != null ? Math.round(hv10        * 10)   / 10   : null,
         hv21:        hv21        != null ? Math.round(hv21        * 10)   / 10   : null,
+        hv63:        hv63        != null ? Math.round(hv63        * 10)   / 10   : null,
         vol_error:   volError,
         levels,
-        time_baseline: computeTimeBaseline(currentHourET()),
       }),
     };
 

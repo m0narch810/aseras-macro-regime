@@ -85,7 +85,12 @@ function isAuthorized(event) {
 }
 
 // ── HTTP HELPERS ─────────────────────────────────────────────────────────────
-function fetchJson(url, cookie) {
+// timeoutMs default 8500: Netlify Functions hard-kill at 10s, so the upstream
+// wait must stay under that — otherwise the function is killed mid-fetch and the
+// browser gets a 502 instead of the graceful {error} envelope the frontend
+// handles (preserve last render). The 0→1→2 fallback passes a shorter value so
+// three sequential probes still fit the 10s budget.
+function fetchJson(url, cookie, timeoutMs) {
   return new Promise((resolve, reject) => {
     const req = https.get(url, {
       headers: { ...AGENT_HEADERS, Cookie: `ff_session=${cookie}` },
@@ -100,7 +105,7 @@ function fetchJson(url, cookie) {
       });
     });
     req.on('error', reject);
-    req.setTimeout(20000, () => { req.destroy(); reject(new Error('Timeout')); });
+    req.setTimeout(timeoutMs || 8500, () => { req.destroy(); reject(new Error('Timeout')); });
   });
 }
 
@@ -135,188 +140,96 @@ function currentHourET() {
   return h + m / 60;
 }
 
-// ── HOLD PROBABILITY MODEL ────────────────────────────────────────────────────
-// Logistic regression fitted on 489,396 intraday touch events from 2,897
-// Combined QQQ (Feb-Dec 2025) + SPY (Jan 2020-Dec 2022) dataset — 511,571 touch events.
-// LR CV AUC 0.6485 ± 0.0015 vs composite score AUC 0.521. XGBoost CV AUC 0.8297.
-// Multi-regime training: 2020 COVID, 2021 bull, 2022 bear, 2025 bull.
-// Coefficients from models/wall_score_intraday.json — do not hand-tune.
+// ── HOLD PROBABILITY MODEL (mechanical) ───────────────────────────────────────
+// Wall-Hold Reliability R, derived purely from options-dealer mechanics — NO
+// historical backtest fitting. Replaces the prior LR/XGBoost model that was
+// fit on QQQ+SPY touch events (removed: that data was not predictive).
 //
-// Features unavailable at inference time default to training-set means,
-// zeroing out their standardised contribution:
-//   - vex_over_gex, charmex_over_gex: unit-scale mismatch between OPRA and FreeFlow
-//   - approach_vel, from_below: intraday touch features, not available at snapshot time
-//   - pd_*/pw_* (volume profile): requires historical NQ 1m bars, not available in function
-const _LR = {
-  intercept: 0.003902,
-  coef: {
-    gex_norm:          0.001064,
-    vex_norm:         -0.033479,
-    charmex_norm:      0.077967,
-    oi_norm:           0.033544,
-    vex_over_gex:      0.000328,
-    charmex_over_gex: -0.016355,
-    dist_pct:          0.058991,
-    is_high_vol:      -0.141109,
-    is_contraction:    0.099613,
-    is_put:            0.112393,
-    in_neg_gamma:      0.029986,
-    wall_above_flip:  -0.118096,
-    confluence:        0.035603,
-    time_of_day:       0.291898,
-    approach_vel:     -0.017616,
-    from_below:       -0.150283,
-    pd_on_hvn:        -0.210247,
-    pd_on_lvn:         0.005647,
-    pd_in_value_area: -0.077016,
-    pd_dist_to_poc:   -0.437749,
-    pd_dist_to_hvn:    0.073889,
-    pd_dist_to_lvn:    0.205878,
-    pw_on_hvn:        -0.149423,
-    pw_on_lvn:        -0.056097,
-    pw_in_value_area: -0.055324,
-    pw_dist_to_poc:   -0.054233,
-    vp_aligned:        0.241393,
-  },
-  mean: {
-    gex_norm:          77.233949,
-    vex_norm:          65.747533,
-    charmex_norm:      30.218452,
-    oi_norm:           26.118006,
-    vex_over_gex:      -3.684046,
-    charmex_over_gex:  -1.707606,
-    dist_pct:          -0.028924,
-    is_high_vol:        0.737118,
-    is_contraction:     0.087321,
-    is_put:             0.768105,
-    in_neg_gamma:       0.025246,
-    wall_above_flip:    0.977366,
-    confluence:         0.271563,
-    time_of_day:       12.522011,
-    approach_vel:       0.945891,
-    from_below:         0.473461,
-    pd_on_hvn:          0.105618,
-    pd_on_lvn:          0.087433,
-    pd_in_value_area:   0.181578,
-    pd_dist_to_poc:   120.777540,
-    pd_dist_to_hvn:    95.566733,
-    pd_dist_to_lvn:    83.303753,
-    pw_on_hvn:          0.071441,
-    pw_on_lvn:          0.142000,
-    pw_in_value_area:   0.277574,
-    pw_dist_to_poc:   292.613343,
-    vp_aligned:         0.174607,
-  },
-  scale: {
-    gex_norm:          30.326448,
-    vex_norm:          32.001922,
-    charmex_norm:      31.526241,
-    oi_norm:           23.179645,
-    vex_over_gex:     539.318444,
-    charmex_over_gex: 117.024901,
-    dist_pct:           0.263279,
-    is_high_vol:        0.440199,
-    is_contraction:     0.282305,
-    is_put:             0.422043,
-    in_neg_gamma:       0.156871,
-    wall_above_flip:    0.148734,
-    confluence:         0.444766,
-    time_of_day:        1.702099,
-    approach_vel:       5.155001,
-    from_below:         0.499295,
-    pd_on_hvn:          0.307348,
-    pd_on_lvn:          0.282468,
-    pd_in_value_area:   0.385496,
-    pd_dist_to_poc:   157.127889,
-    pd_dist_to_hvn:   140.624823,
-    pd_dist_to_lvn:   125.023897,
-    pw_on_hvn:          0.257560,
-    pw_on_lvn:          0.349050,
-    pw_in_value_area:   0.447802,
-    pw_dist_to_poc:   288.250723,
-    vp_aligned:         0.379631,
-  },
-};
+//   R = cap(  B_regime × P × O × A_dex × PCR × S_skew
+//                       × F_term × F_vrp × F_gtbr × G_pin , 1.0)
+//
+// Long/short-gamma logic lives ONLY in the regime baseline. Per-strike factors
+// supply the variance. Sign convention: net_gex > 0 = call-dominated (call
+// wall), net_gex < 0 = put-dominated (put wall) — NOT dealer long/short gamma.
+//
+// ctx fields (assembled once per request by scoreLevels):
+//   gammaFlip, futuresPrice, timeOfDayET — regime + GTBR + pinning gating
+//   atmIv          — ATM IV % for skew comparison
+//   rvIvRatio      — variance-risk-premium filter (optional → no-op)
+//   hvTermRatio    — hv5/hv63 short-vs-long realized vol (optional → no-op)
+//   gtbr           — expected remaining NQ range in pts (null → filter off)
+//   dagDecileThr   — |net_dag| top-decile cutoff across nearby strikes (pinning)
+function computeHoldProb(level, ctx) {
+  ctx = ctx || {};
+  const strike   = level.strike_futures;
+  const spot     = ctx.futuresPrice;
+  const netGex   = level.net_gex || 0;
+  const absGex   = level.abs_gex || Math.abs(netGex);
+  const netDex   = level.net_dex || 0;
+  const netDag   = Math.abs(level.net_dag || 0);
+  const distNq   = level.dist_nq != null ? level.dist_nq
+                 : (strike != null && spot != null ? strike - spot : 0);
 
-// Expected hold_prob for a wall with all-average Greek features at the given
-// time of day. Used by the frontend to set a time-adjusted display threshold.
-// Uses LR closed-form — XGB has no equivalent analytic baseline.
-function computeTimeBaseline(timeOfDayET) {
-  const z = _LR.intercept
-    + _LR.coef.time_of_day * (timeOfDayET - _LR.mean.time_of_day) / _LR.scale.time_of_day;
-  return 1 / (1 + Math.exp(-z));
-}
-
-// ── XGBoost tree model (CV AUC 0.830) ────────────────────────────────────────
-// 300 trees, 27 features, same feature set as LR above.
-// Loaded at module init; computeHoldProb falls back to LR if absent.
-let _XGB = null;
-try { _XGB = require('../../../models/xgb_wall.json'); } catch (_) {}
-
-function _xgbTraverse(node, scaled) {
-  if ('leaf' in node) return node.leaf;
-  const val = scaled[node.split];
-  const goId = (val == null || val !== val)
-    ? node.missing
-    : val < node.split_condition ? node.yes : node.no;
-  const ch = node.children;
-  for (let i = 0; i < ch.length; i++) {
-    if (ch[i].nodeid === goId) return _xgbTraverse(ch[i], scaled);
+  // 1. Global gamma regime baseline — the only place long/short gamma enters.
+  // Our gamma flip is computed locally (FreeFlow doesn't return one), so it can
+  // be a strike or two off. A binary spot>flip test would swing every wall 5×
+  // on a tiny flip error near the money. Instead use a vol-scaled NEAR_FLIP band
+  // (same ±0.5×daily-1σ as levels.js): inside the band we can't trust which side
+  // spot is on, so the baseline sits neutral at 0.3 rather than cliff-edging.
+  let B = 0.3;
+  if (ctx.gammaFlip != null && spot != null) {
+    const band = ctx.atmIv > 0
+      ? Math.max(30, 0.5 * spot * (ctx.atmIv / 100) / Math.sqrt(252))
+      : 50;
+    const diff = spot - ctx.gammaFlip;
+    B = diff > band ? 0.5 : diff < -band ? 0.1 : 0.3;
   }
-  return 0;
-}
 
-function _xgbPredict(raw) {
-  const feats = _XGB.features;
-  const scaled = {};
-  for (let i = 0; i < feats.length; i++) {
-    const f = feats[i];
-    scaled[f] = (raw[f] - _LR.mean[f]) / _LR.scale[f];
+  // 2a. Protrusion (0–1) → 0.5–1.5. Dominant nodes bend local price structure.
+  const prot = level.protrusion != null ? level.protrusion : 0.5;
+  const P = 0.5 + prot;
+
+  // 2b. One-sidedness |GEX|/ag ∈ [0.5,1] → 0.85–1.15. Pure directional dealer
+  //     risk hedges more decisively than offsetting call/put gamma.
+  const ratio = absGex > 0 ? Math.min(1, Math.abs(netGex) / absGex) : 0.5;
+  const O = Math.max(0.85, Math.min(1.15, 0.85 + 0.6 * (ratio - 0.5)));
+
+  // 2c. Hedge-polarity alignment. Counter-trend dealer delta = wall; pro-trend
+  //     = acceleration zone. Above spot needs DEX>0 (sell into rallies); below
+  //     spot needs DEX<0 (buy dips).
+  const aboveSpot   = distNq > 0;
+  const counterTrend = aboveSpot ? (netDex > 0) : (netDex < 0);
+  const A_dex = counterTrend ? 1.25 : 0.5;
+
+  // 2d. Dominant-side OI asymmetry → 0.9–1.1. Pure call/put walls > mixed-OI.
+  const co = level.call_oi || 0, po = level.put_oi || 0, toi = co + po;
+  const asym = toi > 0 ? Math.max(co, po) / toi : 0.5;
+  const PCR = 0.9 + 0.4 * (asym - 0.5);
+
+  // 2e. Side-aware IV skew: |strike_iv − ATM| / ATM > 0.20 → ×1.15. Absolute
+  //     deviation rewards both put-skew and sharp call-side bidding. Upper
+  //     sanity bound guards against garbage far-OTM iv_pct leaking in.
+  let S_skew = 1.0;
+  if (ctx.atmIv > 0 && level.strike_iv != null && level.strike_iv < 5 * ctx.atmIv) {
+    if (Math.abs(level.strike_iv - ctx.atmIv) / ctx.atmIv > 0.20) S_skew = 1.15;
   }
-  let score = 0;
-  const trees = _XGB.trees;
-  for (let i = 0; i < trees.length; i++) score += _xgbTraverse(trees[i], scaled);
-  return Math.round(1 / (1 + Math.exp(-score)) * 1000) / 1000;
-}
 
-// gammaFlip and futuresPrice are optional; when provided, enables in_neg_gamma
-// and wall_above_flip features which meaningfully improve the prediction.
-function computeHoldProb(level, volRegime, timeOfDayET, gammaFlip, futuresPrice) {
-  const isPut   = (level.net_gex || 0) < 0;
-  const distPct = level.dist_nq != null && (level.strike_futures || futuresPrice)
-    ? level.dist_nq / (level.strike_futures || futuresPrice) * 100
-    : 0;
+  // 3a. Vol term structure: short realized spiking vs long → wall breakdown.
+  const F_term = (ctx.hvTermRatio != null && ctx.hvTermRatio > 1.25) ? 0.85 : 1.0;
 
-  // Start with training means for all features — unavailable features contribute zero
-  // after standardisation (raw[f] == mean[f] => (raw-mean)/scale == 0).
-  const raw = Object.assign({}, _LR.mean);
+  // 3b. Variance risk premium: IV richly above RV → mean-reversion favored.
+  const F_vrp = (ctx.rvIvRatio != null && ctx.rvIvRatio < 0.5) ? 1.15 : 1.0;
 
-  // Override with computed values for features available at inference time
-  raw.gex_norm         = Math.abs(level.gex_norm     || 0);
-  raw.vex_norm         = Math.abs(level.vex_norm     || 0);
-  raw.charmex_norm     = Math.abs(level.charmex_norm || 0);
-  raw.oi_norm          = Math.abs(level.oi_norm      || 0);
-  raw.dist_pct         = distPct;
-  raw.is_high_vol      = volRegime === 'EXPANSION'   ? 1 : 0;
-  raw.is_contraction   = volRegime === 'CONTRACTION' ? 1 : 0;
-  raw.is_put           = isPut ? 1 : 0;
-  raw.in_neg_gamma     = (gammaFlip != null && futuresPrice != null)
-                           ? (futuresPrice < gammaFlip ? 1 : 0)
-                           : _LR.mean.in_neg_gamma;
-  raw.wall_above_flip  = (gammaFlip != null && level.strike_futures != null)
-                           ? (level.strike_futures > gammaFlip ? 1 : 0)
-                           : _LR.mean.wall_above_flip;
-  raw.confluence       = (level.confluence != null) ? level.confluence : _LR.mean.confluence;
-  raw.time_of_day      = timeOfDayET || _LR.mean.time_of_day;
-  // vex_over_gex, charmex_over_gex, approach_vel, from_below, pd_*/pw_* stay at mean
+  // 3c. GTBR inelasticity guardrail: a wall beyond expected remaining range is
+  //     reached only on a momentum surge that runs through it.
+  const F_gtbr = (ctx.gtbr != null && Math.abs(distNq) > ctx.gtbr) ? 0.2 : 1.0;
 
-  if (_XGB) return _xgbPredict(raw);
+  // 4. Late-session pinning: top-decile DAG after 14:00 ET = magnetic pull.
+  const G_pin = (ctx.timeOfDayET > 14 && ctx.dagDecileThr != null
+                 && netDag >= ctx.dagDecileThr) ? 1.25 : 1.0;
 
-  let z = _LR.intercept;
-  for (const [feat, coef] of Object.entries(_LR.coef)) {
-    z += coef * (raw[feat] - _LR.mean[feat]) / _LR.scale[feat];
-  }
-  return Math.round(1 / (1 + Math.exp(-z)) * 1000) / 1000;
+  const R = B * P * O * A_dex * PCR * S_skew * F_term * F_vrp * F_gtbr * G_pin;
+  return Math.round(Math.min(1.0, R) * 1000) / 1000;
 }
 
 // ── OPTIONS FLOW CORE ────────────────────────────────────────────────────────
@@ -333,23 +246,45 @@ function aggregateDataset(data) {
       ? Math.round(row.strike_futures * 10) / 10
       : Math.round(etf * ratio * 10) / 10;
     if (!strikes[sf]) {
-      strikes[sf] = { strike_etf: etf, net_gex: 0, net_vex: 0, net_charmex: 0,
-                      net_dex: 0, net_vegaex: 0, net_dag: 0, total_oi: 0 };
+      strikes[sf] = { strike_etf: etf, net_gex: 0, abs_gex: 0, net_vex: 0, net_charmex: 0,
+                      net_dex: 0, net_vegaex: 0, net_dag: 0, total_oi: 0,
+                      call_oi: 0, put_oi: 0, _iv_oi_sum: 0 };
     }
     const s = strikes[sf];
+    const oi = row.oi || 0;
     s.net_gex     += row.gex     || 0;
+    // abs_gex (raw `ag`): gross/two-sided gamma at the strike. A strike can have
+    // small net GEX but large gross gamma — relevant to wall stickiness. Falls
+    // back to |gex| if the upstream row omits `ag`.
+    s.abs_gex     += (row.ag != null ? row.ag : Math.abs(row.gex || 0));
     s.net_vex     += row.vex     || 0;
     s.net_charmex += row.charmex || 0;
     s.net_dex     += row.dex     || 0;
     s.net_vegaex  += row.vegaex  || 0;
     s.net_dag     += row.dag     || 0;
-    s.total_oi    += row.oi      || 0;
+    s.total_oi    += oi;
+    // Call/put OI split (raw `right`): each row is one side of the strike.
+    // Lets downstream compute put/call ratio + dominant side per level.
+    if (row.right === 'C')      s.call_oi += oi;
+    else if (row.right === 'P') s.put_oi  += oi;
+    // OI-weighted implied vol accumulator → strike_iv (skew vs ATM). Far-OTM
+    // iv_pct is unreliable, but levels are filtered to ±FILTER_PCT (near-money)
+    // where it's sane. OI-weighting damps thin strikes.
+    if (row.iv_pct != null && oi > 0) s._iv_oi_sum += row.iv_pct * oi;
+  }
+  // Finalize OI-weighted strike IV and drop the accumulator.
+  for (const sf in strikes) {
+    const s = strikes[sf];
+    s.strike_iv = s.total_oi > 0 ? s._iv_oi_sum / s.total_oi : null;
+    delete s._iv_oi_sum;
   }
   return {
     strikes,
     futuresPrice: data.futures_price || 0,
     spotEtf:      data.etf_spot      || 0,
     ratio:        data.ratio         || 41.14,
+    bookGex:      data.total_gex     != null ? data.total_gex : null,
+    bookDex:      data.total_dex     != null ? data.total_dex : null,
   };
 }
 
@@ -491,9 +426,10 @@ function _nmsWalls(walls, separation) {
 
 // Scores nearby strikes using regime-adjusted weights. Returns strikes above
 // MIN_SCORE sorted descending. Only strikes within FILTER_PCT of futures price.
-// volRegime and gammaFlip are passed through to computeHoldProb.
-// iv (optional) enables GTBR computation inside HPS; pass null/undefined to skip.
-function scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip, iv) {
+// gammaFlip + iv feed the mechanical hold_prob and GTBR. volRegime feeds HPS.
+// volCtx (optional) = { rvIvRatio, hv5, hv63 } enables the VRP + term-structure
+// filters in computeHoldProb; omitted by callers without vol context (no-op).
+function scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip, iv, volCtx) {
   const nearby = nearbyStrikes(strikes, futuresPrice);
   if (!nearby.length) return [];
 
@@ -505,6 +441,23 @@ function scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip, iv) {
   const gexProt = computeProtrusion(nearby.map(r => r.net_gex));
 
   const timeET = currentHourET();
+
+  // Request-level context shared by every strike's hold_prob.
+  const vc      = volCtx || {};
+  const hvTermRatio = (vc.hv5 != null && vc.hv63 != null && vc.hv63 > 0)
+    ? vc.hv5 / vc.hv63 : null;
+  const dagAbs  = nearby.map(r => Math.abs(r.net_dag || 0)).sort((a, b) => a - b);
+  // 90th-percentile |DAG| cutoff for the late-session pinning boost.
+  const dagDecileThr = dagAbs.length
+    ? dagAbs[Math.min(dagAbs.length - 1, Math.floor(0.9 * (dagAbs.length - 1)))]
+    : null;
+  const holdCtx = {
+    gammaFlip, futuresPrice, timeOfDayET: timeET, atmIv: iv,
+    rvIvRatio:   vc.rvIvRatio != null ? vc.rvIvRatio : null,
+    hvTermRatio,
+    gtbr:        computeGTBR(futuresPrice, iv, timeET),
+    dagDecileThr,
+  };
 
   const scored = nearby
     .map((r, i) => {
@@ -521,8 +474,9 @@ function scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip, iv) {
         charmex_norm: chmN[i]  * 100,
         oi_norm:      oiN[i]   * 100,
         strike_futures: r.strike_futures,
+        protrusion:   gexProt[i],
       };
-      const hold_prob = computeHoldProb(levelWithNorm, volRegime, timeET, gammaFlip, futuresPrice);
+      const hold_prob = computeHoldProb(levelWithNorm, holdCtx);
       const hps = computeHPS(levelWithNorm, futuresPrice, iv, gammaFlip, volRegime, gexProt[i], timeET);
       return {
         strike_futures: Math.round(r.strike_futures * 10)  / 10,
@@ -535,6 +489,10 @@ function scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip, iv) {
         hps_conditions: hps.conditions,
         type:           base + (volSens > 2.0 ? ' + VOL SENSITIVE' : ''),
         net_gex:        Math.round(r.net_gex),
+        abs_gex:        Math.round(r.abs_gex || 0),
+        call_oi:        Math.round(r.call_oi || 0),
+        put_oi:         Math.round(r.put_oi  || 0),
+        strike_iv:      r.strike_iv != null ? Math.round(r.strike_iv * 10) / 10 : null,
         net_vex:        Math.round(r.net_vex),
         net_charmex:    Math.round(r.net_charmex),
         net_dex:        Math.round(r.net_dex),
@@ -699,7 +657,7 @@ const PINNING_REGIME_ACTIVE = false;
 module.exports = {
   FILTER_PCT, MIN_SCORE, VALID_USERS, SESSION_MAX_AGE_MS,
   REGIME_WEIGHTS, AGENT_HEADERS, BASE_HEADERS,
-  isAuthorized, fetchJson, httpGetJson, todayET, currentHourET, computeHoldProb, computeTimeBaseline,
+  isAuthorized, fetchJson, httpGetJson, todayET, currentHourET, computeHoldProb,
   aggregateDataset, computeGammaFlip, normalizeAbs,
   nearbyStrikes, scoreLevels, computeGTBR, computeHPS,
   classifyVolRegime, getWeights,
