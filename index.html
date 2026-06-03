@@ -896,6 +896,19 @@ footer .alph { color: rgba(255,255,255,0.55); }
 }
 tr.non-dominant { opacity: 0.38; }
 
+/* ── DTE EXPIRY PICKER ───────────────────────────── */
+.dte-btn {
+  padding: 3px 10px; font-size: 10px; font-weight: 600;
+  border-radius: 4px; border: 1px solid rgba(255,255,255,0.15);
+  background: transparent; color: var(--muted);
+  cursor: pointer; transition: all 0.15s;
+}
+.dte-btn:hover { border-color: rgba(255,255,255,0.35); color: var(--text); }
+.dte-btn.active {
+  border-color: var(--bull); background: rgba(52,211,153,0.12); color: var(--bull);
+}
+.dte-btn.loading { cursor: progress; opacity: 0.55; }
+
 /* ── HPS CHECKLIST ────────────────────────────────── */
 .hps-grid {
   display: grid;
@@ -1716,25 +1729,21 @@ function renderLevels(d) {
   }
 
   // ── DTE PICKER ──
-  const dtePicker = el("div", {style:{
+  const dtePicker = el("div", {id:"dte-picker", style:{
     display:"flex", alignItems:"center", gap:"6px",
     margin:"10px 0 4px", flexWrap:"wrap"
   }});
   dtePicker.appendChild(el("span", {style:{fontSize:"9px",color:"var(--ghost)",letterSpacing:"0.12em",textTransform:"uppercase",marginRight:"4px"}}, "Expiry"));
   [["Auto", null], ["0DTE", 0], ["1DTE", 1], ["2DTE", 2]].forEach(function(pair) {
     const label = pair[0], dteVal = pair[1];
-    const isActive = selectedLevelsDTE === dteVal;
     const btn = el("button", {
-      style:{
-        padding:"3px 10px", fontSize:"10px", fontWeight:"600",
-        borderRadius:"4px", border:"1px solid",
-        cursor:"pointer", transition:"all 0.15s",
-        borderColor: isActive ? "var(--bull)" : "rgba(255,255,255,0.15)",
-        background:  isActive ? "rgba(52,211,153,0.12)" : "transparent",
-        color:       isActive ? "var(--bull)" : "var(--muted)",
-      }
+      className: "dte-btn" + (selectedLevelsDTE === dteVal ? " active" : ""),
+      "data-dte": String(dteVal),
     }, label);
-    btn.addEventListener("click", function() { loadLevels(dteVal); });
+    btn.addEventListener("click", function() {
+      if (dteVal === selectedLevelsDTE) return;  // already showing this expiry — no-op
+      loadLevels(dteVal);
+    });
     dtePicker.appendChild(btn);
   });
   if (d.expiry_date) {
@@ -1835,6 +1844,22 @@ let levelsRefreshTimeout = null;
 let levelsCountdownTimer = null;
 let lastLevelsUpdate     = null;
 let selectedLevelsDTE    = null; // null = auto
+let _levelsReqId         = 0;    // monotonic guard — only the latest request renders
+
+// Immediately reflect the pending expiry selection on the picker buttons
+// (the picker is otherwise only rebuilt when a fetch resolves, which feels frozen).
+// isLoading=false clears the progress state without rebuilding the picker.
+function markDtePending(isLoading) {
+  const picker = document.getElementById("dte-picker");
+  if (!picker) return;
+  picker.querySelectorAll(".dte-btn").forEach(function(b) {
+    const raw = b.getAttribute("data-dte");
+    const val = raw === "null" ? null : parseInt(raw, 10);
+    const isSel = val === selectedLevelsDTE;
+    b.classList.toggle("active", isSel);
+    b.classList.toggle("loading", isSel && isLoading !== false);
+  });
+}
 
 function formatTimeET(date) {
   return date.toLocaleString('en-US', {
@@ -1923,9 +1948,18 @@ function startCountdownTimer() {
 
 function loadLevels(dte) {
   if (dte !== undefined) { selectedLevelsDTE = dte; _prevLevels = {}; }
+  const reqId = ++_levelsReqId;   // claim latest; out-of-order/stale responses are discarded
+  markDtePending();               // instant visual feedback on the clicked button
+
+  // Browser fetch has no default timeout — abort after 20s so a hung request
+  // can't leave the picker stuck on "loading" or stall the refresh feel.
+  const ctrl   = new AbortController();
+  const killer = setTimeout(function() { ctrl.abort(); }, 20000);
+
   const dteParam = selectedLevelsDTE != null ? "&dte=" + selectedLevelsDTE : "";
   fetch("/.netlify/functions/levels?_=" + Date.now() + dteParam, {
     method: "GET",
+    signal: ctrl.signal,
     headers: {
       "Authorization": "Bearer " + localStorage.getItem("vanta_session")
     }
@@ -1935,6 +1969,9 @@ function loadLevels(dte) {
       return r.json();
     })
     .then(function(d) {
+      clearTimeout(killer);
+      if (reqId !== _levelsReqId) return;  // a newer click/refresh superseded this response
+
       // Diff against previous snapshot — attach delta_gex / delta_oi per strike
       if (d.levels && Object.keys(_prevLevels).length) {
         d.levels.forEach(function(lvl) {
@@ -1950,18 +1987,18 @@ function loadLevels(dte) {
 
       levelsLoaded     = true;
       lastLevelsUpdate = new Date();
-      renderLevels(d);
-      startCountdownTimer();
-      scheduleNextRefresh();
+      renderLevels(d);  // rebuilds the picker fresh, clearing the loading state
     })
     .catch(function() {
+      clearTimeout(killer);
+      if (reqId !== _levelsReqId) return;  // superseded — newer request owns the UI
       if (!levelsLoaded) {
         const app = document.getElementById("levels-app");
         clearEl(app);
         app.appendChild(el("div", {className:"lvl-await"}, "Awaiting data…"));
+      } else {
+        markDtePending(false);  // keep old data, but stop the progress spinner
       }
-      startCountdownTimer();
-      scheduleNextRefresh();
     });
 }
 
@@ -2464,6 +2501,8 @@ fetch("/.netlify/functions/bias?_" + Date.now(), {
   });
 
 loadLevels();
+startCountdownTimer();   // 1s countdown ticker (independent of fetch outcome)
+scheduleNextRefresh();   // self-sustaining minute-boundary refresh chain
 loadIntraday();
 initHashRouting();
 </script>
