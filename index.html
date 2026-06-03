@@ -1347,6 +1347,15 @@ window.addEventListener("hashchange", function() {
   const hash = window.location.hash.slice(1) || "bias";
   if (VALID_TABS.indexOf(hash) !== -1) {
     switchTab(hash);
+    if (hash === "levels" && typeof maybeRefreshLevels === "function") maybeRefreshLevels();
+  }
+});
+
+// Returning to a backgrounded tab: refresh stale levels so it never shows blank/old data.
+document.addEventListener("visibilitychange", function() {
+  if (!document.hidden && (window.location.hash.slice(1) || "bias") === "levels"
+      && typeof maybeRefreshLevels === "function") {
+    maybeRefreshLevels();
   }
 });
 
@@ -1874,6 +1883,32 @@ function markDtePending(isLoading) {
   });
 }
 
+// Transient error banner that does NOT wipe existing data. Auto-clears, and is
+// removed on the next successful render (renderLevels rebuilds levels-app).
+function showLevelsError(msg) {
+  const app = document.getElementById("levels-app");
+  if (!app) return;
+  const old = document.getElementById("levels-err-banner");
+  if (old) old.remove();
+  const banner = el("div", {id:"levels-err-banner", style:{
+    fontSize:"10px", color:"var(--bear)", padding:"6px 10px", margin:"6px 0",
+    background:"var(--bear-dim)", border:"1px solid var(--bear-b)", borderRadius:"4px",
+    letterSpacing:"0.03em",
+  }}, "⚠ " + msg);
+  app.insertBefore(banner, app.firstChild);
+  setTimeout(function() {
+    const b = document.getElementById("levels-err-banner");
+    if (b) b.remove();
+  }, 8000);
+}
+
+// Refresh levels when returning to the tab if data is missing/stale, so a
+// transient error that happened while away self-heals on return.
+function maybeRefreshLevels() {
+  const stale = !lastLevelsUpdate || (Date.now() - lastLevelsUpdate.getTime() > 20000);
+  if (stale) loadLevels();
+}
+
 function formatTimeET(date) {
   return date.toLocaleString('en-US', {
     hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
@@ -1962,8 +1997,10 @@ function startCountdownTimer() {
 function loadLevels(dte) {
   // Only wipe the delta baseline when the expiry actually changes — a manual
   // re-click or auto-refresh on the same expiry keeps its intensification history.
-  if (dte !== undefined && dte !== selectedLevelsDTE) {
-    selectedLevelsDTE = dte;
+  const prevSelected = selectedLevelsDTE;
+  const isSwitch     = (dte !== undefined && dte !== selectedLevelsDTE);
+  if (dte !== undefined) selectedLevelsDTE = dte;
+  if (isSwitch) {
     _prevLevels = {}; _gexStreak = {}; _prevLevelsDTE = null; _baselineTime = null;
   }
   const reqId = ++_levelsReqId;   // claim latest; out-of-order/stale responses are discarded
@@ -1978,6 +2015,23 @@ function loadLevels(dte) {
   // Browser fetch has no default timeout — abort after 20s so a hung request
   // can't leave the picker stuck on "loading".
   const killer = setTimeout(function() { ctrl.abort(); }, 20000);
+
+  // On any failure: never blank a tab that already has good data, and never
+  // strand the picker on an expiry we couldn't actually load.
+  function onFailure(msg) {
+    if (reqId !== _levelsReqId) return;  // superseded (or aborted) — newer request owns the UI
+    if (isSwitch && levelsLoaded) {
+      selectedLevelsDTE = prevSelected;  // revert — the data on screen is still prevSelected's
+      markDtePending(false);
+      showLevelsError(msg || "Could not load that expiry.");
+    } else if (!levelsLoaded) {
+      const app = document.getElementById("levels-app");
+      if (app) { clearEl(app); app.appendChild(el("div", {className:"lvl-await"}, "Awaiting data…")); }
+    } else {
+      markDtePending(false);  // transient auto-refresh error — keep last good render
+      showLevelsError(msg || "Refresh failed — showing last update.");
+    }
+  }
 
   const dteParam = selectedLevelsDTE != null ? "&dte=" + selectedLevelsDTE : "";
   fetch("/.netlify/functions/levels?_=" + Date.now() + dteParam, {
@@ -1994,21 +2048,17 @@ function loadLevels(dte) {
     .then(function(d) {
       clearTimeout(killer);
       if (reqId !== _levelsReqId) return;  // a newer click/refresh superseded this response
+      // levels.js returns {error:true} with HTTP 200 when the upstream fetch fails —
+      // treat it as a failure, not as empty data, so we don't blank the tab.
+      if (!d || d.error || !Array.isArray(d.levels)) { onFailure(d && d.message); return; }
       attachDeltas(d);
       levelsLoaded     = true;
       lastLevelsUpdate = new Date();
       renderLevels(d);  // rebuilds the picker fresh, clearing the loading state
     })
-    .catch(function() {
+    .catch(function(e) {
       clearTimeout(killer);
-      if (reqId !== _levelsReqId) return;  // superseded (or aborted) — newer request owns the UI
-      if (!levelsLoaded) {
-        const app = document.getElementById("levels-app");
-        clearEl(app);
-        app.appendChild(el("div", {className:"lvl-await"}, "Awaiting data…"));
-      } else {
-        markDtePending(false);  // keep old data, but stop the progress spinner
-      }
+      onFailure(e && e.message);
     });
 }
 
