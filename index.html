@@ -1671,7 +1671,7 @@ function renderLevels(d) {
   const gfQqq = (d.gamma_flip != null && d.ratio) ? d.gamma_flip / d.ratio : null;
   const gfColor = (gfQqq != null) ? "var(--mixed)" : "var(--ghost)";
   const gfSpan = el("span", {style:{color:gfColor, fontWeight:"700"}},
-    gfQqq != null ? Math.round(gfQqq).toString() : "—");
+    gfQqq != null ? gfQqq.toFixed(1) : "—");
   hdr.appendChild(stat("γ Flip", gfSpan));
 
   hdr.appendChild(stat("IV",
@@ -2077,9 +2077,10 @@ function renderIntraday(d) {
   const levRow = el("div", {className:"arch-levels-row"});
   if (d.gamma_flip != null) {
     const li1 = el("div", {className:"arch-level-item"});
-    li1.appendChild(el("div", {className:"arch-level-lbl"}, "Gamma Flip"));
+    li1.appendChild(el("div", {className:"arch-level-lbl"}, "γ Flip (QQQ)"));
+    const gfQqq2 = (d.nq_price && d.qqq_price) ? d.gamma_flip * d.qqq_price / d.nq_price : null;
     li1.appendChild(el("div", {className:"arch-level-val", style:{color:"var(--flip)"}},
-      d.gamma_flip.toLocaleString("en-US", {minimumFractionDigits:1, maximumFractionDigits:1})));
+      gfQqq2 != null ? gfQqq2.toFixed(1) : d.gamma_flip.toFixed(1)));
     levRow.appendChild(li1);
   }
   if (d.nq_price != null) {
@@ -2201,7 +2202,7 @@ function renderIntraday(d) {
   gamCard.appendChild(el("div", {className:"iday-state-badge " + gammaRegClass(gamReg)}, gamReg));
   gamCard.appendChild(kv("NQ Price", d.nq_price != null ?
     d.nq_price.toLocaleString("en-US", {minimumFractionDigits:1, maximumFractionDigits:1}) : "—"));
-  gamCard.appendChild(kv("γ Flip", d.gamma_flip != null ?
+  gamCard.appendChild(kv("γ Flip (NQ)", d.gamma_flip != null ?
     d.gamma_flip.toLocaleString("en-US", {minimumFractionDigits:1, maximumFractionDigits:1}) : "—"));
   if (d.nq_price != null && d.gamma_flip != null) {
     const diff = d.nq_price - d.gamma_flip;

@@ -375,7 +375,7 @@ function computeGammaFlip(strikes, futuresPrice) {
     for (const row of sorted)
       if (Math.abs(row.gex) < minAbs) { minAbs = Math.abs(row.gex); bestFlip = row.strike; }
   }
-  return bestFlip != null ? Math.round(bestFlip) : null;
+  return bestFlip != null ? Math.round(bestFlip * 10) / 10 : null;
 }
 
 // Min-max normalisation of absolute values for cross-metric scoring.
