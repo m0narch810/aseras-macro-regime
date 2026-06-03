@@ -28,6 +28,12 @@ exports.handler = async (event) => {
     const params   = event.queryStringParameters || {};
     const today    = todayET();
 
+    // Kick off the vol fetch concurrently — it's independent of the levels lookup,
+    // so overlapping the two upstream round-trips shaves ~one RTT off every refresh.
+    const volPromise = fetchJson(`${BASE_URL}/vol/realized?symbol=${SYMBOL}`, cookie)
+      .then(v => ({ v }))
+      .catch(e => ({ err: e.message }));
+
     // If caller passes ?dte=N use that specific offset; otherwise auto-fallback 0→1→2.
     let data, activeExp, activeDTE;
     const requestedDte = params.dte != null ? parseInt(params.dte, 10) : null;
@@ -52,13 +58,13 @@ exports.handler = async (event) => {
     }
 
     let iv = null, rvIvRatio = null, hv21 = null, volError = null;
-    try {
-      const vol = await fetchJson(`${BASE_URL}/vol/realized?symbol=${SYMBOL}`, cookie);
-      iv          = vol.current_iv  ?? null;
-      rvIvRatio   = vol.rv_iv_ratio ?? null;
-      hv21        = vol.hv21        ?? null;
-    } catch (e) {
-      volError = e.message;
+    const volRes = await volPromise;
+    if (volRes.err) {
+      volError = volRes.err;
+    } else {
+      iv          = volRes.v.current_iv  ?? null;
+      rvIvRatio   = volRes.v.rv_iv_ratio ?? null;
+      hv21        = volRes.v.hv21        ?? null;
     }
 
     const { strikes, futuresPrice, spotEtf, ratio } = aggregateDataset(data);
