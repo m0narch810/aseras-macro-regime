@@ -868,9 +868,10 @@ footer .alph { color: rgba(255,255,255,0.55); }
 }
 
 /* ── GEX / OI DELTA INDICATORS ──────────────────── */
-.delta-up   { color: var(--bull);  font-size: 9px; margin-left: 3px; font-weight: 700; }
-.delta-down { color: var(--bear);  font-size: 9px; margin-left: 3px; font-weight: 700; }
-.delta-flat { color: var(--ghost); font-size: 9px; margin-left: 3px; }
+.delta-up   { color: var(--bull);  font-size: 11px; margin-left: 3px; font-weight: 700; }
+.delta-down { color: var(--bear);  font-size: 11px; margin-left: 3px; font-weight: 700; }
+.delta-flat { color: var(--ghost); font-size: 10px; margin-left: 3px; }
+.delta-streak { font-size: 8px; font-weight: 800; vertical-align: super; margin-left: 1px; letter-spacing: 0.02em; }
 
 /* ── CONVICTION BADGES ───────────────────────────── */
 .conviction-badge {
@@ -907,7 +908,8 @@ tr.non-dominant { opacity: 0.38; }
 .dte-btn.active {
   border-color: var(--bull); background: rgba(52,211,153,0.12); color: var(--bull);
 }
-.dte-btn.loading { cursor: progress; opacity: 0.55; }
+@keyframes dtePulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+.dte-btn.loading { cursor: progress; animation: dtePulse 0.9s ease-in-out infinite; }
 
 /* ── HPS CHECKLIST ────────────────────────────────── */
 .hps-grid {
@@ -1484,9 +1486,11 @@ function renderBiasLevels(bias, qqqPrice) {
     var scoreColor = score >= 4 ? "var(--bull)" : score === 3 ? "var(--mixed)" : "var(--ghost)";
     var summaryTxt = "HPS " + (score || 0) + "/5 · " + (label || "LOW");
     if (level.delta_gex != null && level.net_gex !== 0) {
-      var dgPct = level.delta_gex / Math.abs(level.net_gex);
-      if      (dgPct < -0.08) summaryTxt += "  ·  ⚠ GEX declining";
-      else if (dgPct >  0.08) summaryTxt += "  ·  ↑ GEX building";
+      var dgPct  = level.delta_gex / Math.abs(level.net_gex);
+      var streak = (level.gex_streak && level.gex_streak.count >= 2)
+        ? " (" + level.gex_streak.count + " refreshes)" : "";
+      if      (dgPct < -0.08) summaryTxt += "  ·  ⚠ GEX fading" + streak;
+      else if (dgPct >  0.08) summaryTxt += "  ·  ↑ GEX building" + streak;
     }
     grid.appendChild(el("div", {className:"hps-summary", style:{color:scoreColor}}, summaryTxt));
     return grid;
@@ -1546,7 +1550,7 @@ function makeLvlRow(lvl) {
     String(lvl.type || "—")));
   tr.appendChild(ttd);
 
-  // GEX with reinforcing/pulling delta arrow
+  // GEX with reinforcing/pulling delta arrow + intensification streak
   var gexTd = el("td", {style:{color:gexColor}});
   gexTd.appendChild(document.createTextNode(fmtGex(lvl.net_gex)));
   if (lvl.delta_gex != null && lvl.net_gex !== 0) {
@@ -1554,6 +1558,10 @@ function makeLvlRow(lvl) {
     var dgCls = dgPct >  0.03 ? "delta-up" : dgPct < -0.03 ? "delta-down" : "delta-flat";
     var dgSym = dgPct >  0.03 ? "↑" : dgPct < -0.03 ? "↓" : "·";
     gexTd.appendChild(el("span", {className:dgCls}, dgSym));
+    // consecutive refreshes moving the same way → e.g. "↑x3" = building 3 refreshes straight
+    if (lvl.gex_streak && lvl.gex_streak.count >= 2) {
+      gexTd.appendChild(el("span", {className:"delta-streak " + dgCls}, "x" + lvl.gex_streak.count));
+    }
   }
   tr.appendChild(gexTd);
 
@@ -1740,10 +1748,7 @@ function renderLevels(d) {
       className: "dte-btn" + (selectedLevelsDTE === dteVal ? " active" : ""),
       "data-dte": String(dteVal),
     }, label);
-    btn.addEventListener("click", function() {
-      if (dteVal === selectedLevelsDTE) return;  // already showing this expiry — no-op
-      loadLevels(dteVal);
-    });
+    btn.addEventListener("click", function() { loadLevels(dteVal); });
     dtePicker.appendChild(btn);
   });
   if (d.expiry_date) {
@@ -1754,6 +1759,10 @@ function renderLevels(d) {
 
   const refreshBar = el("div", {className:"lvl-refresh-status"});
   refreshBar.appendChild(el("div", {id:"levels-last-updated", className:"refresh-label"}, "Loading…"));
+  if (d._baselineLabel) {
+    refreshBar.appendChild(el("div", {className:"refresh-label", style:{color:"var(--ghost)"}},
+      "·  Δ vs " + d._baselineLabel + " (↑ building / ↓ fading)"));
+  }
   refreshBar.appendChild(el("div", {id:"levels-refresh-countdown", className:"refresh-countdown"}, ""));
   app.appendChild(refreshBar);
 
@@ -1845,6 +1854,10 @@ let levelsCountdownTimer = null;
 let lastLevelsUpdate     = null;
 let selectedLevelsDTE    = null; // null = auto
 let _levelsReqId         = 0;    // monotonic guard — only the latest request renders
+let _levelsAbort         = null; // AbortController of the in-flight request (cancel on supersede)
+let _prevLevelsDTE       = null; // which expiry _prevLevels belongs to (avoids cross-expiry deltas)
+let _gexStreak           = {};   // strike_futures → {dir,count}: consecutive-refresh GEX trend
+let _baselineTime        = null; // timestamp of the snapshot _prevLevels was captured from
 
 // Immediately reflect the pending expiry selection on the picker buttons
 // (the picker is otherwise only rebuilt when a fetch resolves, which feels frozen).
@@ -1947,13 +1960,23 @@ function startCountdownTimer() {
 }
 
 function loadLevels(dte) {
-  if (dte !== undefined) { selectedLevelsDTE = dte; _prevLevels = {}; }
+  // Only wipe the delta baseline when the expiry actually changes — a manual
+  // re-click or auto-refresh on the same expiry keeps its intensification history.
+  if (dte !== undefined && dte !== selectedLevelsDTE) {
+    selectedLevelsDTE = dte;
+    _prevLevels = {}; _gexStreak = {}; _prevLevelsDTE = null; _baselineTime = null;
+  }
   const reqId = ++_levelsReqId;   // claim latest; out-of-order/stale responses are discarded
   markDtePending();               // instant visual feedback on the clicked button
 
+  // Cancel any still-in-flight request so it frees its connection slot immediately.
+  // Without this, fast clicking saturates the browser's ~6-connection-per-host pool
+  // and the newest request queues behind stale ones — the "takes ages / stops working" bug.
+  if (_levelsAbort) _levelsAbort.abort();
+  const ctrl = new AbortController();
+  _levelsAbort = ctrl;
   // Browser fetch has no default timeout — abort after 20s so a hung request
-  // can't leave the picker stuck on "loading" or stall the refresh feel.
-  const ctrl   = new AbortController();
+  // can't leave the picker stuck on "loading".
   const killer = setTimeout(function() { ctrl.abort(); }, 20000);
 
   const dteParam = selectedLevelsDTE != null ? "&dte=" + selectedLevelsDTE : "";
@@ -1971,27 +1994,14 @@ function loadLevels(dte) {
     .then(function(d) {
       clearTimeout(killer);
       if (reqId !== _levelsReqId) return;  // a newer click/refresh superseded this response
-
-      // Diff against previous snapshot — attach delta_gex / delta_oi per strike
-      if (d.levels && Object.keys(_prevLevels).length) {
-        d.levels.forEach(function(lvl) {
-          var prev = _prevLevels[lvl.strike_futures];
-          if (!prev) return;
-          lvl.delta_gex = lvl.net_gex   - prev.net_gex;
-          lvl.delta_oi  = lvl.total_oi  - prev.total_oi;
-        });
-      }
-      // Cache for next diff (keyed by strike_futures)
-      _prevLevels = {};
-      (d.levels || []).forEach(function(lvl) { _prevLevels[lvl.strike_futures] = lvl; });
-
+      attachDeltas(d);
       levelsLoaded     = true;
       lastLevelsUpdate = new Date();
       renderLevels(d);  // rebuilds the picker fresh, clearing the loading state
     })
     .catch(function() {
       clearTimeout(killer);
-      if (reqId !== _levelsReqId) return;  // superseded — newer request owns the UI
+      if (reqId !== _levelsReqId) return;  // superseded (or aborted) — newer request owns the UI
       if (!levelsLoaded) {
         const app = document.getElementById("levels-app");
         clearEl(app);
@@ -2000,6 +2010,39 @@ function loadLevels(dte) {
         markDtePending(false);  // keep old data, but stop the progress spinner
       }
     });
+}
+
+// Diff each strike against the previous snapshot of the SAME expiry and attach:
+//   delta_gex / delta_oi   — single-refresh change
+//   gex_streak {dir,count} — consecutive refreshes moving the same way (intensifying/fading)
+// Then re-baseline for the next diff.
+function attachDeltas(d) {
+  const curDTE = d.expiry_dte;
+  if (_prevLevelsDTE !== curDTE) { _prevLevels = {}; _gexStreak = {}; }  // expiry changed under us
+
+  const haveBaseline = Object.keys(_prevLevels).length > 0;
+  if (d.levels && haveBaseline) {
+    d.levels.forEach(function(lvl) {
+      const prev = _prevLevels[lvl.strike_futures];
+      if (!prev) return;
+      lvl.delta_gex = lvl.net_gex  - prev.net_gex;
+      lvl.delta_oi  = lvl.total_oi - prev.total_oi;
+      const pct = prev.net_gex !== 0 ? lvl.delta_gex / Math.abs(prev.net_gex) : 0;
+      const dir = pct > 0.03 ? 1 : pct < -0.03 ? -1 : 0;
+      const s   = _gexStreak[lvl.strike_futures];
+      _gexStreak[lvl.strike_futures] = (dir !== 0 && s && s.dir === dir)
+        ? { dir: dir, count: s.count + 1 }
+        : { dir: dir, count: dir !== 0 ? 1 : 0 };
+      lvl.gex_streak = _gexStreak[lvl.strike_futures];
+    });
+    d._baselineLabel = _baselineTime ? formatTimeET(_baselineTime) : null;
+  }
+
+  // Re-baseline for next diff (keyed by strike_futures, tagged with this expiry)
+  _prevLevels = {};
+  (d.levels || []).forEach(function(lvl) { _prevLevels[lvl.strike_futures] = lvl; });
+  _prevLevelsDTE = curDTE;
+  _baselineTime  = new Date();
 }
 
 // ── RTH / INTRADAY HELPERS ────────────────────────
