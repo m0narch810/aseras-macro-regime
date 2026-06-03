@@ -184,6 +184,16 @@ def _build_per_expiry_and_aggregate(datasets, expiries_kept):
 
     combined = pd.concat(per_exp_dfs, ignore_index=True)
 
+    # Per-strike call/put OI split (raw `right`) + OI-weighted strike IV (`iv_pct`),
+    # so logged snapshots replay the mechanical hold_prob's PCR + skew factors
+    # faithfully. Tolerates older payloads missing the columns (splits→0, IV→NaN).
+    _oi = pd.to_numeric(combined.get('oi', 0), errors='coerce').fillna(0)
+    _right = combined['right'] if 'right' in combined.columns else pd.Series([''] * len(combined), index=combined.index)
+    combined['_call_oi'] = _oi.where(_right == 'C', 0.0)
+    combined['_put_oi']  = _oi.where(_right == 'P', 0.0)
+    _ivp = pd.to_numeric(combined.get('iv_pct'), errors='coerce') if 'iv_pct' in combined.columns else None
+    combined['_iv_oi'] = (_ivp * _oi) if _ivp is not None else float('nan')
+
     greek_agg = dict(
         strike_etf  = ('strike_etf',  'first'),
         net_gex     = ('gex',         'sum'),
@@ -194,11 +204,19 @@ def _build_per_expiry_and_aggregate(datasets, expiries_kept):
         net_vegaex  = ('vegaex',      'sum'),
         net_dag     = ('dag',         'sum'),
         total_oi    = ('oi',          'sum'),
+        call_oi     = ('_call_oi',    'sum'),
+        put_oi      = ('_put_oi',     'sum'),
+        _iv_oi      = ('_iv_oi',      'sum'),
     )
-    per_exp = (combined
+
+    def _finalize(g):
+        g['strike_iv'] = (g['_iv_oi'] / g['total_oi']).where(g['total_oi'] > 0)
+        return g.drop(columns=['_iv_oi'])
+
+    per_exp = _finalize(combined
                .groupby(['strike_futures', 'expiry'], as_index=False)
                .agg(**greek_agg))
-    agg     = (combined
+    agg     = _finalize(combined
                .groupby('strike_futures', as_index=False)
                .agg(**greek_agg))
     agg['expiry'] = 'AGGREGATE'
@@ -329,13 +347,24 @@ def save_snapshot(df, label):
         # Full raw greeks (per-expiry rows have per-expiry sums; AGGREGATE rows have totals)
         'net_gex', 'abs_gex', 'net_vex', 'net_charmex', 'net_dex',
         'net_dag', 'net_vegaex', 'total_oi',
+        # Call/put OI split + OI-weighted strike IV (for hold_prob PCR + skew replay)
+        'call_oi', 'put_oi', 'strike_iv',
         # Aggregate-row scoring (None on per-expiry rows)
         'score', 'type',
     ]
     cols = [c for c in cols if c in df.columns]
 
     write_header = not os.path.exists(fpath)
-    df[cols].to_csv(fpath, mode='a', header=write_header, index=False)
+    if write_header:
+        out = df[cols]
+    else:
+        # Align to the existing file's header so a schema change (e.g. newly added
+        # call_oi/put_oi/strike_iv) never misaligns appended rows. New columns take
+        # effect on the next day's fresh file, where they go into the header.
+        with open(fpath) as f:
+            existing = f.readline().strip().split(',')
+        out = df.reindex(columns=existing)
+    out.to_csv(fpath, mode='a', header=write_header, index=False)
     print(f"  Saved {len(df)} rows → {fpath}")
 
     # Append intraday-bias audit line: a JSONL marker that this snapshot exists.

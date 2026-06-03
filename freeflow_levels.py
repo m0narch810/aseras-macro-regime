@@ -111,6 +111,26 @@ def get_trading_days(n=5):
 # AGGREGATION
 # ============================================================
 
+# Per-strike call/put OI split (from raw `right`) and OI-weighted strike IV
+# (from `iv_pct`). Mirrors the live function so logged snapshots replay the
+# mechanical hold_prob's PCR + skew factors faithfully. Tolerates older payloads
+# missing the columns by leaving the splits at 0 / IV at NaN.
+def _add_split_cols(df):
+    oi = pd.to_numeric(df.get('oi', 0), errors='coerce').fillna(0)
+    right = df['right'] if 'right' in df.columns else pd.Series([''] * len(df), index=df.index)
+    df['_call_oi'] = oi.where(right == 'C', 0.0)
+    df['_put_oi']  = oi.where(right == 'P', 0.0)
+    ivp = pd.to_numeric(df.get('iv_pct'), errors='coerce') if 'iv_pct' in df.columns else None
+    df['_iv_oi'] = (ivp * oi) if ivp is not None else float('nan')
+    return df
+
+
+def _finalize_split(agg):
+    agg = agg.rename(columns={'_call_oi': 'call_oi', '_put_oi': 'put_oi'})
+    agg['strike_iv'] = (agg['_iv_oi'] / agg['total_oi']).where(agg['total_oi'] > 0)
+    return agg.drop(columns=['_iv_oi'])
+
+
 def aggregate_exposures(fl_data):
     rows = fl_data.get('rows', [])
     if not rows:
@@ -122,6 +142,7 @@ def aggregate_exposures(fl_data):
         ratio = fl_data.get('ratio', 41.14)
         df['strike_futures'] = (df['strike_etf'] * ratio).round(1)
 
+    df = _add_split_cols(df)
     agg = df.groupby('strike_futures').agg(
         strike_etf  = ('strike_etf',  'first'),
         net_gex     = ('gex',         'sum'),
@@ -132,9 +153,12 @@ def aggregate_exposures(fl_data):
         net_vegaex  = ('vegaex',      'sum'),
         net_dag     = ('dag',         'sum'),
         total_oi    = ('oi',          'sum'),
+        _call_oi    = ('_call_oi',    'sum'),
+        _put_oi     = ('_put_oi',     'sum'),
+        _iv_oi      = ('_iv_oi',      'sum'),
     ).reset_index()
 
-    return agg
+    return _finalize_split(agg)
 
 
 def aggregate_multi_expiry(fl_datasets):
@@ -152,7 +176,7 @@ def aggregate_multi_expiry(fl_datasets):
     if not dfs:
         return None
 
-    combined = pd.concat(dfs, ignore_index=True)
+    combined = _add_split_cols(pd.concat(dfs, ignore_index=True))
 
     agg = combined.groupby('strike_futures').agg(
         strike_etf  = ('strike_etf',  'first'),
@@ -164,9 +188,12 @@ def aggregate_multi_expiry(fl_datasets):
         net_vegaex  = ('vegaex',      'sum'),
         net_dag     = ('dag',         'sum'),
         total_oi    = ('oi',          'sum'),
+        _call_oi    = ('_call_oi',    'sum'),
+        _put_oi     = ('_put_oi',     'sum'),
+        _iv_oi      = ('_iv_oi',      'sum'),
     ).reset_index()
 
-    return agg
+    return _finalize_split(agg)
 
 # ============================================================
 # VOL REGIME

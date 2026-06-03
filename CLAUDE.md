@@ -60,6 +60,7 @@ data, math, and surface in the dashboard.
 | Rebuild SPY 2020-2022 GEX profiles | `scripts/decode_spy_eod.py` |
 | Label SPY touch events | `scripts/label_spy_touches.py` |
 | Validate wall scoring against outcomes | `scripts/calibration_summary.py` |
+| Forward-test mechanical hold_prob (self-supervised) | `scripts/forward_test_walls.py` |
 | Run reversal trade parameter search | `scripts/reversal_backtest.py` |
 | Run limit-order simulation | `scripts/limit_order_backtest.py` |
 | VP utilities (POC, VAH/VAL, HVN, LVN) | `scripts/compute_volume_profile.py` |
@@ -431,6 +432,13 @@ Requires `FRED_API_KEY` repo secret.
 - Gamma regime → vol regime mapping (Dim/Eraker/Vilkov 2025)
 - Modern SPX in amplification not pinning regime (Elms 2026)
 - Macro weekly hit rate 76.9% (13 weeks; significant vs random, NOT vs bull base rate)
+
+**Forward-test harness** (`scripts/forward_test_walls.py`): replays mechanical R for
+every logged 0DTE wall and labels HELD/BROKE against yfinance NQ=F 1m bars (touch +
+30-min 2-bar-confirmed break). Pilot on 6 sparse days: n=82, hold 62%, rank AUC 0.47 —
+underpowered and inconclusive (PCR/skew replayed neutral on pre-field snapshots; most
+walls near-flip → low-R). Needs denser capture (GitHub drops the */5 cron → ~5 snaps/day;
+run the local daemon or an external dispatcher) before it can confirm/refute the model.
 
 **`hold_prob` (mechanical R) — theory-grounded, NOT yet validated on outcomes:**
 - Pure dealer-mechanics formula (gamma regime, GTBR inelasticity, hedge polarity, one-sidedness,
