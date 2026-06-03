@@ -854,7 +854,6 @@ exports.handler = async (event) => {
         pc1_momentum_loadings: pca.pc1_momentum_loadings,
         pc1_momentum_valid:    pca.pc1_momentum_valid,
         price_source:  priceSource,
-        mm_intensification: [],
         macro_bias:    macroBias,
         macro_regime:  macroRegime,
         pdf_primary_bias:   pdfBiasTag,
