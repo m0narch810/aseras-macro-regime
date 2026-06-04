@@ -253,6 +253,11 @@ These are the highest-quality walls; `hold_prob` is meaningfully higher on confl
 - `hps_score` — mechanistic checklist count (0-5)
 - `hps_label` — `"HIGH"` (≥4) / `"MEDIUM"` (3) / `"LOW"` (0-2)
 - `hps_conditions` — `{regime_positive, gtbr_inside, dex_aligned, charm_vanna, magnitude_outlier}`
+- `net_tex` — theta exposure ($ time-decay/day). FreeFlow returns no theta, so it's
+  derived per row via the driftless gamma-theta identity `θ = -½·Γ·S²·σ²` (T cancels;
+  reuses FreeFlow's gamma + per-strike iv_pct), summed × OI × 100 / 365. Always negative
+  (book bleeds decay); tracks gross gamma. Not consumed by hold_prob — available only.
+  Recoverable on logged snapshots from `net_gex` + `strike_iv` via the same identity.
 - `type` — `"CALL WALL"` or `"PUT WALL"` + ` + VOL SENSITIVE` if `|VEX| / |GEX| > 2.0`
 - `wall_reaction` — tag from `classifyWallReaction(level)` (private reaction table)
 - `confluence` — boolean int (from FreeFlow data, not always populated)

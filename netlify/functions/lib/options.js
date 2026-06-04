@@ -239,6 +239,7 @@ function computeHoldProb(level, ctx) {
 function aggregateDataset(data) {
   const rows  = data.rows  || [];
   const ratio = data.ratio || 41.14;
+  const spotEtf = data.etf_spot || 0;   // QQQ price — gamma/theta are per-ETF-share
   const strikes = {};
   for (const row of rows) {
     const etf = row.strike_etf || 0;
@@ -247,7 +248,7 @@ function aggregateDataset(data) {
       : Math.round(etf * ratio * 10) / 10;
     if (!strikes[sf]) {
       strikes[sf] = { strike_etf: etf, net_gex: 0, abs_gex: 0, net_vex: 0, net_charmex: 0,
-                      net_dex: 0, net_vegaex: 0, net_dag: 0, total_oi: 0,
+                      net_dex: 0, net_vegaex: 0, net_dag: 0, net_tex: 0, total_oi: 0,
                       call_oi: 0, put_oi: 0, _iv_oi_sum: 0 };
     }
     const s = strikes[sf];
@@ -271,6 +272,16 @@ function aggregateDataset(data) {
     // iv_pct is unreliable, but levels are filtered to ±FILTER_PCT (near-money)
     // where it's sane. OI-weighting damps thin strikes.
     if (row.iv_pct != null && oi > 0) s._iv_oi_sum += row.iv_pct * oi;
+    // net_tex — theta exposure ($ time decay/day). FreeFlow gives no theta, so
+    // derive it from the gamma-theta identity (driftless, r≈0 — exact for 0DTE):
+    //   theta_annual_per_share = -½·Γ·S²·σ²    (T cancels; reuses FreeFlow's Γ)
+    // → daily $ decay of this strike's OI = θ_annual/365 × 100 shares × OI.
+    // Negative = the book bleeds this many $/day to decay at this strike. Garbage
+    // far-OTM iv_pct yields garbage tex, but only ±FILTER_PCT strikes are surfaced.
+    if (row.gamma != null && row.iv_pct != null && spotEtf > 0 && oi > 0) {
+      const sig = row.iv_pct / 100;
+      s.net_tex += -0.5 * row.gamma * spotEtf * spotEtf * sig * sig / 365 * 100 * oi;
+    }
   }
   // Finalize OI-weighted strike IV and drop the accumulator.
   for (const sf in strikes) {
@@ -497,6 +508,7 @@ function scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip, iv, v
         net_charmex:    Math.round(r.net_charmex),
         net_dex:        Math.round(r.net_dex),
         net_vegaex:     Math.round(r.net_vegaex),
+        net_tex:        Math.round(r.net_tex || 0),
         total_oi:       Math.round(r.total_oi),
         wall_reaction,
       };
