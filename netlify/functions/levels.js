@@ -1,7 +1,7 @@
 const {
   BASE_HEADERS, isAuthorized, fetchJson,
   todayET, currentHourET, aggregateDataset, computeGammaFlip, scoreLevels,
-  classifyVolRegime, getWeights, computeGTBR,
+  classifyVolRegime, getWeights, computeGTBR, smileAtmIv,
 } = require('./lib/options');
 
 const SYMBOL   = 'QQQ';
@@ -74,6 +74,19 @@ exports.handler = async (event) => {
 
     const { strikes, futuresPrice, spotEtf, ratio, bookGex, bookDex } = aggregateDataset(data);
 
+    // IV fallback: the /vol/realized endpoint times out (or returns a null
+    // current_iv) often enough that GTBR and the gamma-regime band silently die
+    // on those ticks — the readout shows "vol fetch failed" + NEUTRAL regime +
+    // no GTBR. The per-strike smile is always present, so when the endpoint IV
+    // is missing, fall back to the ATM strike's own iv_pct. Strictly better than
+    // null (which forced GTBR=null and vol_regime=NEUTRAL). `iv_source` lets the
+    // dashboard show "smile" instead of an alarming timeout when it degrades.
+    let ivSource = iv != null ? 'endpoint' : null;
+    if (iv == null) {
+      const smileIv = smileAtmIv(strikes, spotEtf);
+      if (smileIv != null) { iv = smileIv; ivSource = 'smile'; }
+    }
+
     // Compute flip + gamma regime first so weights can use both axes.
     const gammaFlip   = computeGammaFlip(strikes, futuresPrice);
     const diff        = futuresPrice != null && gammaFlip != null ? futuresPrice - gammaFlip : null;
@@ -118,6 +131,7 @@ exports.handler = async (event) => {
         gtbr_pts:      (function() { const g = computeGTBR(futuresPrice, iv, currentHourET()); return g != null ? Math.round(g) : null; })(),
         vol_regime:    volRegime,
         iv:          iv          != null ? Math.round(iv          * 10)   / 10   : null,
+        iv_source:   ivSource,
         rv_iv_ratio: rvIvRatio   != null ? Math.round(rvIvRatio   * 1000) / 1000 : null,
         hv5:         hv5         != null ? Math.round(hv5         * 10)   / 10   : null,
         hv10:        hv10        != null ? Math.round(hv10        * 10)   / 10   : null,

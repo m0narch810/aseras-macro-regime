@@ -295,14 +295,40 @@ function aggregateDataset(data) {
     s.strike_iv = s.total_oi > 0 ? s._iv_oi_sum / s.total_oi : null;
     delete s._iv_oi_sum;
   }
+  // book_dex / book_gex: prefer the API's top-level totals, but FreeFlow's
+  // futures-levels payload frequently omits `total_dex` (and sometimes
+  // `total_gex`). When absent, fall back to summing the per-strike nets we
+  // already accumulated above — otherwise the DEX readout is null forever even
+  // though every row carried a `dex`. (This is the "gex delta doesn't work" bug.)
+  let sumGex = 0, sumDex = 0;
+  for (const sf in strikes) { sumGex += strikes[sf].net_gex; sumDex += strikes[sf].net_dex; }
   return {
     strikes,
     futuresPrice: data.futures_price || 0,
     spotEtf:      data.etf_spot      || 0,
     ratio:        data.ratio         || 41.14,
-    bookGex:      data.total_gex     != null ? data.total_gex : null,
-    bookDex:      data.total_dex     != null ? data.total_dex : null,
+    bookGex:      data.total_gex     != null ? data.total_gex : sumGex,
+    bookDex:      data.total_dex     != null ? data.total_dex : sumDex,
   };
+}
+
+// Smile-consistent ATM implied vol: the at-the-money strike's own OI-weighted
+// iv_pct (strike_iv). Independent of the flaky /vol/realized endpoint, so it's
+// used as a FALLBACK when current_iv is null/timed-out — keeping GTBR and the
+// gamma-regime band alive even when the vol endpoint is down. Returns null only
+// if no strike near spot carries an iv. NOTE: 0DTE smile ATM IV reads lower than
+// the vol endpoint's tenor (~21 vs ~35), so vol_regime EXPANSION detection is
+// conservative on this path — acceptable, since the alternative is iv=null.
+function smileAtmIv(strikes, spotEtf) {
+  if (!spotEtf) return null;
+  let best = null, bestDist = Infinity;
+  for (const sf in strikes) {
+    const s = strikes[sf];
+    if (s.strike_iv == null || !(s.strike_iv > 0)) continue;
+    const dist = Math.abs((s.strike_etf || 0) - spotEtf);
+    if (dist < bestDist) { bestDist = dist; best = s.strike_iv; }
+  }
+  return best != null ? Math.round(best * 10) / 10 : null;
 }
 
 // Locates the gamma flip (GEX zero crossing nearest to current price) by linear
@@ -754,7 +780,7 @@ module.exports = {
   FILTER_PCT, MIN_SCORE, VALID_USERS, SESSION_MAX_AGE_MS,
   REGIME_WEIGHTS, AGENT_HEADERS, BASE_HEADERS,
   isAuthorized, fetchJson, httpGetJson, todayET, currentHourET, computeHoldProb,
-  aggregateDataset, computeGammaFlip,
+  aggregateDataset, computeGammaFlip, smileAtmIv,
   nearbyStrikes, scoreLevels, computeGTBR, computeHPS,
   classifyVolRegime, getWeights,
   classifyWallReaction, computeAggregateGreeks, applyBiasTable,
