@@ -28,3 +28,4 @@ data/processed/wall_forward_test.csv
 data/processed/intraday_score_eval.csv
 data/processed/wall_score_eval.csv
 data/processed/wall_outcomes.csv
+data/processed/wall_validation.csv

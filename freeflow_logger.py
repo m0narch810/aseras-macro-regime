@@ -311,6 +311,16 @@ def build_snapshot():
     gamma_flip   = compute_gamma_flip(agg, futures_price)
     gamma_regime = classify_gamma_regime(futures_price, gamma_flip, iv_val)
 
+    # Self-consistent ATM IV: the at-the-money strike's own iv_pct (same smile as
+    # strike_iv, always present). /vol/realized's current_iv is a different/larger
+    # tenor AND intermittently null, so this is the canonical IV for skew + IV_norm.
+    atm_iv = None
+    if 'strike_iv' in agg_keep.columns and len(agg_keep):
+        a = agg_keep.dropna(subset=['strike_iv'])
+        if len(a):
+            i = (a['strike_etf'] - spot_etf).abs().idxmin()
+            atm_iv = float(a.loc[i, 'strike_iv'])
+
     # Snapshot-level metadata duplicated on every row.
     now_et = current_et()
     out['timestamp']     = now_et.strftime('%Y-%m-%d %H:%M:%S')
@@ -321,6 +331,7 @@ def build_snapshot():
     out['gamma_regime']  = gamma_regime
     out['vol_regime']    = regime
     out['iv']            = ctx.get('current_iv')
+    out['atm_iv']        = atm_iv          # smile-consistent ATM IV (vol-endpoint-independent)
     out['rv_iv_ratio']   = ctx.get('rv_iv_ratio')
     out['hv5']           = ctx.get('hv5')
     out['hv10']          = ctx.get('hv10')
@@ -341,7 +352,7 @@ def save_snapshot(df, label):
         'timestamp', 'intended_timestamp', 'snapshot_date', 'snapshot_weekday',
         'session_label', 'expiry',
         'nq_price', 'qqq_price', 'gamma_flip', 'gamma_regime', 'vol_regime',
-        'iv', 'rv_iv_ratio', 'hv5', 'hv10', 'hv21', 'hv63',
+        'iv', 'atm_iv', 'rv_iv_ratio', 'hv5', 'hv10', 'hv21', 'hv63',
         # Strike geometry
         'strike_futures', 'strike_etf', 'dist_nq', 'dist_pct',
         # Full raw greeks (per-expiry rows have per-expiry sums; AGGREGATE rows have totals)

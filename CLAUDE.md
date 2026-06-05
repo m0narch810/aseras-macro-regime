@@ -60,7 +60,8 @@ data, math, and surface in the dashboard.
 | Rebuild SPY 2020-2022 GEX profiles | `scripts/decode_spy_eod.py` |
 | Label SPY touch events | `scripts/label_spy_touches.py` |
 | Validate wall scoring against outcomes | `scripts/calibration_summary.py` |
-| Forward-test mechanical hold_prob (self-supervised) | `scripts/forward_test_walls.py` |
+| Validate scoring + hold_prob vs realized NQ outcomes (self-supervised) | `scripts/validate_walls.py` |
+| Map accurate %-swing reversals to projected strikes (smoothed ratio) | `scripts/map_reversals.py` |
 | Run reversal trade parameter search | `scripts/reversal_backtest.py` |
 | Run limit-order simulation | `scripts/limit_order_backtest.py` |
 | VP utilities (POC, VAH/VAL, HVN, LVN) | `scripts/compute_volume_profile.py` |
@@ -213,13 +214,38 @@ the RTH archetype scoring.
 
 ## Layer 3 — Levels Scoring (netlify/functions/lib/options.js)
 
-Per-strike composite score (unchanged, kept for ranking):
+Per-strike composite score:
 ```
-score = (gex_norm * w_gex + vex_norm * w_vex + charmex_norm * w_charmex
+raw   = (gex_norm * w_gex + vex_norm * w_vex + charmex_norm * w_charmex
        + oi_norm * w_oi + dag_norm * w_dag) × 100
+score = raw × (0.5 + 0.5 × protrusion) × regimeRelevance
 ```
-Each component min-max normalized across nearby strikes. Weights come from a 3×3 table
-indexed by (volRegime, gammaRegime). **Empirically unvalidated magnitude rank — use `hold_prob` for reliability.**
+Weights come from a 3×3 table indexed by (volRegime, gammaRegime). **Empirically unvalidated
+magnitude rank — use `hold_prob` for reliability.**
+
+**Normalization (rewritten 2026-06-04 — was crushing real walls):** components are
+normalized with `normalizeRobust` (scale by the 90th-percentile magnitude, clamped to [0,1])
+instead of min-max — a single monster wall no longer defines the ceiling and zero-out every
+mid-tier intraday level. `net_gex` additionally uses `normalizeGexPerSide` (call walls scaled
+among calls, put walls among puts) so a giant put wall doesn't suppress every call wall.
+
+**Protrusion multiplier softened** `0.25+0.75×prot` → `0.5+0.5×prot`: shoulder/ramp walls
+(the rungs price reverses at on a gamma ladder) keep ≥50% credit instead of being knocked
+below `MIN_SCORE`.
+
+**`regimeRelevance` (NEW — regime + flip position enters the surface, not just hold_prob):**
+computed per wall from spot vs `gammaFlip` using the same vol-scaled band as `levels.js`.
+Reversal geometry = resistance above spot (call wall) or support below spot (put wall).
+POSITIVE gamma → reversal walls ×1.15 / acceleration-geom ×0.90; NEGATIVE → reversal ×0.85;
+NEAR_FLIP → reversal ×1.00 / other ×0.95; UNKNOWN → ×1.0.
+
+**Guaranteed surface (NEW):** the top-5 gross-gamma walls per side within ±2.5% are ALWAYS
+kept even if the composite filters them out — a genuine rank-5 reversal wall can never be
+silently dropped. Each level carries `surfaced_by: 'score' | 'gamma_rank'`.
+
+**NMS tightened** `0.006` (≈4.4 QQQ pts) → `0.0025` (≈1.8 QQQ pts): the old separation merged
+distinct 0DTE dollar strikes (e.g. 733 vs 735) into one zone, demoting a strike you reverse at
+to CONTEXT under its neighbour. Now only immediate $1 neighbours / futures-rounding dupes collapse.
 
 **`hold_prob`** — mechanical Wall-Hold Reliability (R), attached to every scored level.
 Derived purely from options-dealer mechanics — **no historical backtest fitting** (the prior
@@ -227,8 +253,10 @@ QQQ+SPY 511K-touch-event LR/XGBoost model was removed; that data was not predict
 ```
 R = cap( B_regime × P × O × A_dex × PCR × S_skew × F_term × F_vrp × F_gtbr × G_pin , 1.0)
 ```
-- `B_regime` — global gamma baseline (the ONLY place long/short gamma enters): spot > flip → 0.5,
-  spot < flip → 0.1, flip unknown → 0.3
+- `B_regime` — global gamma baseline (the ONLY place long/short gamma enters): smooth ramp across
+  the vol-scaled NEAR_FLIP band — `diff ≥ band → 0.5`, `diff ≤ −band → 0.1`, linear in between
+  (`0.3 + 0.2·diff/band`, = 0.3 exactly at flip). Replaces the old hard 0.1/0.3/0.5 step so a
+  flip estimate a strike or two off nudges B by a few % instead of swinging the wall 5×.
 - `P` — protrusion 0–1 mapped to 0.5–1.5 (dominant local node)
 - `O` — one-sidedness `|GEX|/ag` mapped to 0.85–1.15 (decisive vs offsetting dealer gamma)
 - `A_dex` — hedge polarity: counter-trend DEX (above spot & DEX>0, or below spot & DEX<0) ×1.25,
@@ -261,6 +289,10 @@ These are the highest-quality walls; `hold_prob` is meaningfully higher on confl
 - `type` — `"CALL WALL"` or `"PUT WALL"` + ` + VOL SENSITIVE` if `|VEX| / |GEX| > 2.0`
 - `wall_reaction` — tag from `classifyWallReaction(level)` (private reaction table)
 - `confluence` — boolean int (from FreeFlow data, not always populated)
+- `surfaced_by` — `'score'` (cleared MIN_SCORE) or `'gamma_rank'` (kept by the guaranteed
+  top-5-per-side gross-gamma backstop despite a sub-threshold composite)
+- `is_dominant` — survived per-side NMS (the local leader for its price zone)
+- `conviction` — `'STANDALONE'` (dominant + hps≥4) / `'CONFIRM'` (dominant + hps=3) / `'CONTEXT'`
 
 **Top-level fields added to `levels.js` response:**
 - `gtbr_pts` — expected remaining NQ range in points at time of request (same formula as `computeGTBR`)
@@ -346,6 +378,10 @@ Published empirical references that inform generic constants in `lib/options.js`
   gtbr_inside, dex_aligned, charm_vanna, magnitude_outlier}}`; complements hold_prob
 - `scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip, iv)` — now takes optional
   `iv` (6th arg); each level now includes `hps_score`, `hps_label`, `hps_conditions` fields
+- `normalizeRobust(values)` — scale by 90th-percentile magnitude (clamped 0–1); outlier-resistant
+  replacement for `normalizeAbs` in `scoreLevels` so one monster wall doesn't zero-out the rest
+- `normalizeGexPerSide(netGex)` — robust-normalizes call walls and put walls separately
+  (index-aligned); prevents a giant put wall from suppressing all call walls
 - `currentHourET()` — returns current hour + minute/60 in ET; feeds `time_of_day` feature live
 - `classifyWallReaction(level)` — private reaction table → `wall_reaction` tag
 - `computeAggregateGreeks(strikeArr)` — sign triple + totals across the passed set
@@ -438,12 +474,29 @@ Requires `FRED_API_KEY` repo secret.
 - Modern SPX in amplification not pinning regime (Elms 2026)
 - Macro weekly hit rate 76.9% (13 weeks; significant vs random, NOT vs bull base rate)
 
-**Forward-test harness** (`scripts/forward_test_walls.py`): replays mechanical R for
-every logged 0DTE wall and labels HELD/BROKE against yfinance NQ=F 1m bars (touch +
-30-min 2-bar-confirmed break). Pilot on 6 sparse days: n=82, hold 62%, rank AUC 0.47 —
-underpowered and inconclusive (PCR/skew replayed neutral on pre-field snapshots; most
-walls near-flip → low-R). Needs denser capture (GitHub drops the */5 cron → ~5 snaps/day;
-run the local daemon or an external dispatcher) before it can confirm/refute the model.
+**Validation harness** (`scripts/validate_walls.py`): replays OLD vs NEW scoring + hold_prob for
+every logged 0DTE wall and labels HELD/BROKE against yfinance NQ=F 1m bars (touch + 30-min
+2-bar-confirmed break). Strikes are placed via the smoothed-ratio projection (see strike-conversion
+note below), NOT FreeFlow's strike_futures. Gated to `FIRST_GOOD_DAY = 2026-06-04` — earlier days
+had only ~3-5 sparse snapshots and were deleted from the gex-snapshots branch.
+
+**Validation run 2026-06-04 (today-only, n=589 touched 0DTE walls, base hold rate 56.2%):**
+- **Surfacing fix is real (not overfit):** held-wall recall OLD 35% → NEW 96%; per-wall precision
+  OLD 61% → NEW 57%; DOMINANT precision OLD 52% → NEW 54%. The old composite dropped ~65% of walls
+  that actually held — quantifies the "733 wasn't flagged" complaint. NEW surfaces ~95% of touched
+  walls, so its precision ≈ base rate; the DOMINANT tag (54%) does NOT beat the 56.2% base — we can
+  surface candidates but **cannot yet rank/select which hold.**
+- **`hold_prob` is confirmed broken (the strike correction clarified, did not rescue it):**
+  rank AUC 0.444 (old) / 0.426 (new) — both <0.5, and the smooth-B change made it slightly worse.
+  Calibration is starkly non-monotonic: the 0.4-0.6 bucket holds 82-93% but **every wall with
+  R>0.6 broke (0/43 held).** The factors clearly carry information (buckets are far from random),
+  but the formula combines them wrong — an AUC of 0.43 is an exploitable anti-signal, not noise.
+  hold_prob needs to be REFIT on the labeled touches, not hand-tweaked.
+- **Label caveat:** the touch+2-bar-break definition is noisy for near-spot walls (price
+  oscillates → auto-"break"), which likely inflates the R>0.6 break rate (high R = close +
+  aligned walls). The %-swing-reversal-off-strike definition (`scripts/map_reversals.py`,
+  default 0.33% ≈ 100 NQ pts, scale-invariant) is a cleaner label and should replace
+  touch-break before refitting.
 
 **`hold_prob` (mechanical R) — theory-grounded, NOT yet validated on outcomes:**
 - Pure dealer-mechanics formula (gamma regime, GTBR inelasticity, hedge polarity, one-sidedness,
@@ -462,6 +515,25 @@ run the local daemon or an external dispatcher) before it can confirm/refute the
 - `STRONG_WALL = 60`, `EXCEPTIONAL_WALL = 75`, `H_GEX_CONFIDENCE_CUT = 0.6`
 - `PROXIMITY_EFOLD = 200pts`
 - `GAMMA_ASYMMETRY_RATIO = 0.344` (SPX-derived; NQ-specific value unknown)
+
+**Strike→futures conversion accuracy (found 2026-06-04):** FreeFlow's `strike_futures`
+(used by `levels.js` for `dist_nq`/GTBR and by `validate_walls.py` for touch detection) sits
+~36 NQ pts ABOVE the smoothed-ratio projection. The user's TradingView method —
+`ratio = SMA(NQ_close/QQQ_close, 100)` on extended-hours data, `nq_level = strike × ratio` —
+matches actual reversal wicks far better (733 → 30166 vs FreeFlow 30201; price reversed at
+30151-30164). `scripts/map_reversals.py` implements the smoothed-ratio method. **Implication:**
+production wall NQ prices are biased high by ~30-50 pts, and the earlier validation's touch
+labels were detected at mislocated strikes — so the AUC<0.5 result is partly confounded by
+strike misplacement and must be re-run with smoothed-ratio strike locations before trusting it.
+
+**ATM IV capture (fixed 2026-06-04):** `/vol/realized`'s `current_iv` (the snapshot `iv` column)
+is intermittently null AND a different/larger tenor than the 0DTE option smile (≈35 vs ≈21). The
+per-strike `iv_pct` smile is clean and always present (monotonic put-skew, e.g. 21.7→19.5 across
+730→741). So `freeflow_logger.py` now also logs **`atm_iv`** = the at-the-money strike's own
+`iv_pct` — smile-consistent, vol-endpoint-independent. Use `atm_iv` (not `iv`) for skew + IV_norm
+features so both come from the same smile. (Live `levels.js`/`options.js` still use the
+vol-endpoint `iv` for GTBR/regime — switching those to the smile ATM is a separate change that
+rescales GTBR and needs verification.)
 
 **Known data limitations:**
 - OPRA CBBO uses quote size as OI proxy — underestimates true dealer exposure vs FreeFlow live data
