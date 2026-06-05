@@ -3,16 +3,18 @@ main = "src/worker.js"
 compatibility_date = "2024-11-01"
 
 # ── Cron triggers (UTC) ───────────────────────────────────────────────────────
-# 1) Dispatch the GEX snapshot workflow every 5 min, Mon-Fri, 12:00-21:59 UTC
-#    (~08:00-17:00 ET — covers pre-market through the RTH close incl. DST).
-#    The GitHub workflow itself ET-gates and no-ops outside 03:00-17:00 ET, so a
+# 1) Dispatch the GEX snapshot workflow every 5 min, Mon-Fri, 07:00-21:59 UTC
+#    (full 03:00-17:00 ET envelope incl. pre-market, across EST+EDT). Widened from
+#    12-21 so this fully covers the window the GitHub native schedule used to —
+#    the native cron is now just an hourly fallback, so Cloudflare must own the
+#    whole session. The workflow ET-gates and no-ops outside 03:00-17:00 ET, so a
 #    stray dispatch is cheap. Cloudflare fires these reliably, unlike GitHub's
 #    own */5 schedule which silently drops most ticks (~5 runs/day → ~108/day).
 # 2) Daily heartbeat at 22:15 UTC (~18:15 ET, after the close) — counts the day's
 #    snapshot commits and alerts if the pipeline went quiet (dead FF_SESSION,
 #    expired token, etc.) so breakage surfaces within a day, not weeks.
 [triggers]
-crons = ["*/5 12-21 * * 1-5", "15 22 * * 1-5"]
+crons = ["*/5 7-21 * * 1-5", "15 22 * * 1-5"]
 
 [vars]
 GITHUB_REPO      = "m0narch810/vanta"

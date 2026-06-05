@@ -18,9 +18,15 @@ name: GEX 5-min snapshot
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
+  # The dense 5-min cadence is driven by the Cloudflare worker (vanta-snapshotter)
+  # via workflow_dispatch — GitHub's own scheduler silently drops most */5 ticks
+  # (~5 runs/day instead of ~108). This native schedule is now only an HOURLY
+  # FALLBACK: if the Cloudflare worker dies (as it did 2026-06-05 → only 5 snaps
+  # all day), GitHub still lands ~10/day so a Cloudflare outage degrades to sparse
+  # coverage rather than a total blackout. Same 7-21 UTC envelope as Cloudflare.
   schedule:
-    - cron: '*/5 7-21 * * 1-5'
-  workflow_dispatch:   # manual trigger from the Actions tab
+    - cron: '0 7-21 * * 1-5'
+  workflow_dispatch:   # primary trigger (Cloudflare worker) + manual from Actions tab
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
