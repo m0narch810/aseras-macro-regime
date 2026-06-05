@@ -1705,7 +1705,7 @@ function renderLevels(d) {
   hdr.appendChild(stat("γ Flip", gfSpan));
 
   hdr.appendChild(stat("IV",
-    d.iv != null ? d.iv.toFixed(1) + "%" : "—"));
+    d.iv != null ? d.iv.toFixed(1) + "%" + (d.iv_source === "smile" ? "*" : "") : "—"));
 
   if (d.gtbr_pts != null) {
     var gtbrSpan = el("span", {style:{color:"var(--mixed)", fontWeight:"600"}},
@@ -1724,7 +1724,16 @@ function renderLevels(d) {
 
   app.appendChild(hdr);
 
-  if (d.vol_error) {
+  // Vol endpoint status. If it failed but we recovered on the smile (iv_source
+  // === "smile"), show a calm amber note — GTBR/regime are still live, just from
+  // the 0DTE smile. Only show the alarming red banner when IV is genuinely gone.
+  if (d.vol_error && d.iv_source === "smile") {
+    app.appendChild(el("div", {style:{
+      fontSize:"9px", color:"var(--mixed)", padding:"3px 8px",
+      background:"var(--card)", borderRadius:"3px", marginBottom:"6px",
+      letterSpacing:"0.04em",
+    }}, "Vol endpoint down — IV/GTBR/regime running on 0DTE smile (* by IV). Smile reads lower tenor, so EXPANSION may under-flag."));
+  } else if (d.vol_error) {
     app.appendChild(el("div", {style:{
       fontSize:"9px", color:"var(--bear)", padding:"3px 8px",
       background:"var(--bear-dim)", borderRadius:"3px", marginBottom:"6px",
@@ -2080,27 +2089,31 @@ function attachDeltas(d) {
   const curDTE = d.expiry_dte;
   if (_prevLevelsDTE !== curDTE) { _prevLevels = {}; _gexStreak = {}; }  // expiry changed under us
 
+  // Key the diff on strike_etf (the stable $ option strike, e.g. 706) — NOT
+  // strike_futures, which is strike_etf × the *live* futures ratio and drifts a
+  // fraction of a point every refresh as price moves. Keying on the moving value
+  // meant prev was never found, so delta_gex/arrows/streaks never appeared.
   const haveBaseline = Object.keys(_prevLevels).length > 0;
   if (d.levels && haveBaseline) {
     d.levels.forEach(function(lvl) {
-      const prev = _prevLevels[lvl.strike_futures];
+      const prev = _prevLevels[lvl.strike_etf];
       if (!prev) return;
       lvl.delta_gex = lvl.net_gex  - prev.net_gex;
       lvl.delta_oi  = lvl.total_oi - prev.total_oi;
       const pct = prev.net_gex !== 0 ? lvl.delta_gex / Math.abs(prev.net_gex) : 0;
       const dir = pct > 0.015 ? 1 : pct < -0.015 ? -1 : 0;
-      const s   = _gexStreak[lvl.strike_futures];
-      _gexStreak[lvl.strike_futures] = (dir !== 0 && s && s.dir === dir)
+      const s   = _gexStreak[lvl.strike_etf];
+      _gexStreak[lvl.strike_etf] = (dir !== 0 && s && s.dir === dir)
         ? { dir: dir, count: s.count + 1 }
         : { dir: dir, count: dir !== 0 ? 1 : 0 };
-      lvl.gex_streak = _gexStreak[lvl.strike_futures];
+      lvl.gex_streak = _gexStreak[lvl.strike_etf];
     });
     d._baselineLabel = _baselineTime ? formatTimeET(_baselineTime) : null;
   }
 
-  // Re-baseline for next diff (keyed by strike_futures, tagged with this expiry)
+  // Re-baseline for next diff (keyed by strike_etf, tagged with this expiry)
   _prevLevels = {};
-  (d.levels || []).forEach(function(lvl) { _prevLevels[lvl.strike_futures] = lvl; });
+  (d.levels || []).forEach(function(lvl) { _prevLevels[lvl.strike_etf] = lvl; });
   _prevLevelsDTE = curDTE;
   _baselineTime  = new Date();
 }
