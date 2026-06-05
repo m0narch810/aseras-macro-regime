@@ -182,7 +182,13 @@ function computeHoldProb(level, ctx) {
       ? Math.max(30, 0.5 * spot * (ctx.atmIv / 100) / Math.sqrt(252))
       : 50;
     const diff = spot - ctx.gammaFlip;
-    B = diff > band ? 0.5 : diff < -band ? 0.1 : 0.3;
+    // Smooth ramp across the NEAR_FLIP band instead of a hard 5× cliff: linear
+    // from 0.1 (deep short gamma) through 0.3 (exactly at flip) to 0.5 (deep
+    // long gamma). A flip estimate a strike or two off now nudges B by a few %
+    // instead of flipping the whole wall's reliability.
+    B = diff >= band ? 0.5
+      : diff <= -band ? 0.1
+      : 0.3 + 0.2 * (diff / band);
   }
 
   // 2a. Protrusion (0–1) → 0.5–1.5. Dominant nodes bend local price structure.
@@ -324,19 +330,43 @@ function computeGammaFlip(strikes, futuresPrice) {
   return bestFlip != null ? Math.round(bestFlip * 10) / 10 : null;
 }
 
-// Min-max normalisation of absolute values for cross-metric scoring.
-function normalizeAbs(values) {
+// Robust normalisation: scale by the 90th-percentile magnitude (clamped to
+// [0,1]) instead of the single max. A lone monster wall (e.g. a static 2.6B
+// overnight strike) no longer defines the ceiling and crush every mid-tier
+// intraday wall to ~0 — the "typical strong wall" sets the scale, so a genuine
+// rank-5 level keeps a meaningful score.
+function normalizeRobust(values) {
   const abs = values.map(Math.abs);
-  const mn = Math.min(...abs), mx = Math.max(...abs);
-  if (mx === mn) return abs.map(() => 0);
-  return abs.map(v => (v - mn) / (mx - mn));
+  if (!abs.length) return abs;
+  const sorted = [...abs].sort((a, b) => a - b);
+  const p90 = sorted[Math.floor(0.9 * (sorted.length - 1))] || 0;
+  if (p90 <= 0) return abs.map(() => 0);
+  return abs.map(v => Math.min(1, v / p90));
+}
+
+// Side-aware robust normalisation of net_gex: call walls (>0) are scaled among
+// call walls, put walls (<=0) among put walls. Without this, one giant put wall
+// normalises every CALL wall to ~0 (and vice-versa) even though they live on
+// opposite sides of price. Index-aligned to the input array.
+function normalizeGexPerSide(netGex) {
+  const out = new Array(netGex.length).fill(0);
+  for (const side of [1, -1]) {
+    const idx = [], vals = [];
+    netGex.forEach((g, i) => {
+      if ((g > 0 ? 1 : -1) === side) { idx.push(i); vals.push(g); }
+    });
+    const norm = normalizeRobust(vals);
+    idx.forEach((i, k) => { out[i] = norm[k]; });
+  }
+  return out;
 }
 
 // Protrusion: how much each strike's |GEX| exceeds its local neighborhood mean.
 // Strikes are ordered by price (ascending) — guaranteed by Object.entries integer key ordering.
 // Returns 0-1 normalized values; 1 = dominant local peak, 0 = blends into surroundings.
-// Applied as a score multiplier: (0.25 + 0.75 * protrusion) so non-protruding strikes
-// get at most 25% of their raw score, true walls keep full credit.
+// Applied as a score multiplier: (0.5 + 0.5 * protrusion) so non-protruding strikes
+// (shoulder/ramp walls — exactly the rungs price reverses at on a gamma ladder)
+// keep at least half credit, while true isolated peaks still get full credit.
 function computeProtrusion(values, windowHalf = 3) {
   const abs = values.map(Math.abs);
   const ratios = abs.map((v, i) => {
@@ -435,23 +465,51 @@ function _nmsWalls(walls, separation) {
   return new Set(survivors.map(s => s.strike_futures));
 }
 
-// Scores nearby strikes using regime-adjusted weights. Returns strikes above
-// MIN_SCORE sorted descending. Only strikes within FILTER_PCT of futures price.
-// gammaFlip + iv feed the mechanical hold_prob and GTBR. volRegime feeds HPS.
-// volCtx (optional) = { rvIvRatio, hv5, hv63 } enables the VRP + term-structure
-// filters in computeHoldProb; omitted by callers without vol context (no-op).
+// Scores nearby strikes (within FILTER_PCT) using regime-adjusted weights, then
+// returns those above MIN_SCORE OR in the guaranteed top-gamma-per-side set
+// (surfaced_by: 'score' | 'gamma_rank'), sorted by score descending. Each level
+// is tagged is_dominant (per-side NMS leader) and conviction.
+// gammaFlip + iv feed the regime relevance multiplier, hold_prob, and GTBR.
+// volRegime feeds HPS. volCtx (optional) = { rvIvRatio, hv5, hv63 } enables the
+// VRP + term-structure filters in computeHoldProb; omitted callers no-op those.
 function scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip, iv, volCtx) {
   const nearby = nearbyStrikes(strikes, futuresPrice);
   if (!nearby.length) return [];
 
-  const gexN = normalizeAbs(nearby.map(r => r.net_gex));
-  const vexN = normalizeAbs(nearby.map(r => r.net_vex));
-  const chmN = normalizeAbs(nearby.map(r => r.net_charmex));
-  const oiN  = normalizeAbs(nearby.map(r => r.total_oi));
-  const dagN = normalizeAbs(nearby.map(r => r.net_dag));
+  const gexN = normalizeGexPerSide(nearby.map(r => r.net_gex));
+  const vexN = normalizeRobust(nearby.map(r => r.net_vex));
+  const chmN = normalizeRobust(nearby.map(r => r.net_charmex));
+  const oiN  = normalizeRobust(nearby.map(r => r.total_oi));
+  const dagN = normalizeRobust(nearby.map(r => r.net_dag));
   const gexProt = computeProtrusion(nearby.map(r => r.net_gex));
 
   const timeET = currentHourET();
+
+  // Global gamma regime from spot vs flip — same vol-scaled band as levels.js
+  // and hold_prob. This makes the SURFACE (not just hold_prob) respect where we
+  // are relative to the flip on every calculation.
+  const regimeBand = (iv > 0 && futuresPrice)
+    ? Math.max(30, 0.5 * futuresPrice * (iv / 100) / Math.sqrt(252))
+    : 50;
+  const flipDiff = (gammaFlip != null && futuresPrice != null)
+    ? futuresPrice - gammaFlip : null;
+  const regimeState = flipDiff == null ? 'UNKNOWN'
+    : flipDiff >  regimeBand ? 'POSITIVE'
+    : flipDiff < -regimeBand ? 'NEGATIVE'
+    : 'NEAR_FLIP';
+
+  // Per-wall regime relevance. Reversal geometry = resistance above spot (call
+  // wall) or support below spot (put wall) — where dealer hedging rejects price.
+  // The opposite geometry is an acceleration zone. Long-gamma (POSITIVE)
+  // reinforces reversals; short-gamma (NEGATIVE) lets price run through them;
+  // near-flip is unstable. Gentle multipliers so nothing is over-suppressed.
+  const regimeRelevance = (netGex, distNq) => {
+    const reversal = (distNq > 0) ? (netGex > 0) : (netGex <= 0);
+    if (regimeState === 'POSITIVE')  return reversal ? 1.15 : 0.90;
+    if (regimeState === 'NEGATIVE')  return reversal ? 0.85 : 1.00;
+    if (regimeState === 'NEAR_FLIP') return reversal ? 1.00 : 0.95;
+    return 1.0;
+  };
 
   // Request-level context shared by every strike's hold_prob.
   const vc      = volCtx || {};
@@ -470,11 +528,12 @@ function scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip, iv, v
     dagDecileThr,
   };
 
-  const scored = nearby
+  const scoredAll = nearby
     .map((r, i) => {
       const rawScore = (gexN[i]*weights.gex + vexN[i]*weights.vex + chmN[i]*weights.charmex +
                         oiN[i]*weights.oi   + dagN[i]*weights.dag) * 100;
-      const score = rawScore * (0.25 + 0.75 * gexProt[i]);
+      const score = rawScore * (0.5 + 0.5 * gexProt[i])
+                             * regimeRelevance(r.net_gex, r.dist_nq);
       const volSens = Math.abs(r.net_vex) / (Math.abs(r.net_gex) + 1e-9);
       const base    = r.net_gex > 0 ? 'CALL WALL' : 'PUT WALL';
       const wall_reaction = classifyWallReaction(r);
@@ -512,13 +571,38 @@ function scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip, iv, v
         total_oi:       Math.round(r.total_oi),
         wall_reaction,
       };
-    })
-    .filter(r => r.score >= MIN_SCORE)
+    });
+
+  // Guaranteed surface: the strongest gross-gamma walls per side near the money
+  // are ALWAYS kept, even if the composite filtered them out — so a genuine
+  // rank-5 reversal wall can never be silently dropped just because a monster
+  // static wall dominates the composite. Tagged surfaced_by:'gamma_rank'.
+  const NEAR_BAND_PCT = 2.5, KEEP_PER_SIDE = 5;
+  const guaranteed = new Set();
+  for (const callSide of [true, false]) {
+    scoredAll
+      .filter(l => (l.net_gex > 0) === callSide
+                && Math.abs(l.dist_nq / futuresPrice * 100) <= NEAR_BAND_PCT)
+      .sort((a, b) => b.abs_gex - a.abs_gex)
+      .slice(0, KEEP_PER_SIDE)
+      .forEach(l => guaranteed.add(l.strike_futures));
+  }
+
+  const scored = scoredAll
+    .map(l => ({
+      ...l,
+      surfaced_by: l.score >= MIN_SCORE ? 'score'
+                 : guaranteed.has(l.strike_futures) ? 'gamma_rank' : null,
+    }))
+    .filter(l => l.surfaced_by != null)
     .sort((a, b) => b.score - a.score);
 
-  // NMS: ~3 QQQ strike intervals (≈0.6% of price). Collapses adjacent-strike
-  // clusters into a single dominant level per side, one per genuine price zone.
-  const sep         = futuresPrice * 0.006;
+  // NMS: ~2 QQQ strike intervals (≈0.25% of price ≈ $1.8 QQQ). Collapses only
+  // immediate-neighbour strikes (and futures-rounding duplicates) into the local
+  // leader — distinct dollar strikes stay separate. The old 0.6% (~4.4 QQQ pts)
+  // merged genuinely different 0DTE levels (e.g. 733 vs 735) into one zone, so a
+  // strike you actually reverse at got demoted to CONTEXT under its neighbour.
+  const sep         = futuresPrice * 0.0025;
   const dominantSet = new Set([
     ..._nmsWalls(scored.filter(l => l.net_gex >  0), sep),
     ..._nmsWalls(scored.filter(l => l.net_gex <= 0), sep),
@@ -670,7 +754,7 @@ module.exports = {
   FILTER_PCT, MIN_SCORE, VALID_USERS, SESSION_MAX_AGE_MS,
   REGIME_WEIGHTS, AGENT_HEADERS, BASE_HEADERS,
   isAuthorized, fetchJson, httpGetJson, todayET, currentHourET, computeHoldProb,
-  aggregateDataset, computeGammaFlip, normalizeAbs,
+  aggregateDataset, computeGammaFlip,
   nearbyStrikes, scoreLevels, computeGTBR, computeHPS,
   classifyVolRegime, getWeights,
   classifyWallReaction, computeAggregateGreeks, applyBiasTable,
