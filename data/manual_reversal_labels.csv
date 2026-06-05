@@ -1,0 +1,11 @@
+date,time_et,session,strike_qqq,kind,drawdown_pt,follow_pt,major,has_snapshot,notes
+2026-06-04,06:55,EXT,734,support,4,75,no,no,premarket reaction; reversed before touching 736; no snapshot (capture starts 08:00)
+2026-06-04,08:05,EXT,733,support,1.5,160,yes,yes,clean tap; reversed just before 737
+2026-06-04,09:30,RTH,734,support,1.5,153,yes,yes,opening candle tapped 734 almost exactly; reversed just before 738
+2026-06-04,09:37,RTH,,resistance,,210,yes,yes,NO-STRIKE/blindspot top ~737.75 (75% from 737->738); features showed neg VEX+CHARM = expansion-down vector not a wall
+2026-06-04,10:07,RTH,733,support,15,420,yes,yes,the big one; strongest -DEX (-589M) + heaviest put OI; ran to 743
+2026-06-04,14:00,RTH,743,chop,,,no,yes,magnet/pin; heaviest gamma shelf; chopped ~2-3pm
+2026-06-04,15:30,RTH,743,resistance,,170,yes,yes,rejected down toward 739
+2026-06-04,17:00,RTH,739,chop,,,no,yes,chop into 5pm close
+2026-06-04,18:00,EXT,743,resistance,,500,yes,no,overnight Asia 743->730 ~500pt total (split by 5-6pm maintenance halt); no snapshot (capture ends 17:00)
+2026-06-04,21:00,EXT,730,support,,,yes,no,overnight floor where the dump stopped; heaviest put OI below spot (~32k)
