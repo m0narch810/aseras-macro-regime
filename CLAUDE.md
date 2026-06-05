@@ -293,6 +293,17 @@ These are the highest-quality walls; `hold_prob` is meaningfully higher on confl
   top-5-per-side gross-gamma backstop despite a sub-threshold composite)
 - `is_dominant` — survived per-side NMS (the local leader for its price zone)
 - `conviction` — `'STANDALONE'` (dominant + hps≥4) / `'CONFIRM'` (dominant + hps=3) / `'CONTEXT'`
+- `watch_suppressed` — `true` when spot is BELOW `gammaFlip` (negative gamma) and this is a
+  below-spot put wall that is NOT squeeze-grade (`is_dominant && hold_prob ≥ SQUEEZE_HOLD_PROB`).
+  Below-spot put walls in negative gamma are acceleration rungs, not support (2026-06-05: a −4.8%
+  liquidation sliced every one, incl. a −0.51B wall, without a pause). The dashboard's
+  `buildBiasLevels` drops suppressed walls from the "Long at"/Watching panel — if all are
+  suppressed the long side goes empty with a "negative gamma, don't fade" note (`longSuppressed`).
+  Trigger is raw spot-below-flip, NOT the band-gated NEGATIVE regime: the vol-scaled band reads
+  NEAR_FLIP too long (at the 06-05 open spot was 225pts below flip but still NEAR_FLIP), so the
+  band would make suppression late exactly when it matters. The squeeze exception self-tightens
+  with depth: `hold_prob`'s `B_regime` ramps 0.5→0.1 below flip, so clearing 0.55 is feasible near
+  the flip and mechanically impossible deep in negative gamma — only a near-flip squeeze qualifies.
 
 **Top-level fields added to `levels.js` response:**
 - `gtbr_pts` — expected remaining NQ range in points at time of request (same formula as `computeGTBR`)
@@ -303,6 +314,8 @@ These are the highest-quality walls; `hold_prob` is meaningfully higher on confl
 **Constants:**
 - `FILTER_PCT = 5.0` — strikes within ±5% of futures price
 - `MIN_SCORE = 20.0` — discard scored strikes below this
+- `SQUEEZE_HOLD_PROB = 0.55` — in negative gamma, a below-spot put wall must clear this
+  `hold_prob` (and be `is_dominant`) to escape `watch_suppressed` (squeeze-grade exception)
 - `PROXIMITY_EFOLD = 200.0` — in `intraday.js` for top-wall ranking (true halflife ≈ 139pts)
 - `REGIME_WEIGHTS` — 3×3 (vol × gamma) → {gex, vex, charmex, oi, dag}; **empirically unvalidated**
 

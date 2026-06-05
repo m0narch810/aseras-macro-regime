@@ -30,7 +30,13 @@ exports.handler = async (event) => {
 
     // Kick off the vol fetch concurrently — it's independent of the levels lookup,
     // so overlapping the two upstream round-trips shaves ~one RTT off every refresh.
-    const volPromise = fetchJson(`${BASE_URL}/vol/realized?symbol=${SYMBOL}`, cookie)
+    // /vol/realized is a heavier, flakier endpoint than /futures-levels, so give it
+    // ONE quick retry with a tight per-attempt timeout: recovers most transient
+    // blips while staying inside Netlify's 10s budget (2×4000ms, concurrent with the
+    // levels probe). If it's genuinely down, both fail fast → smile-IV fallback.
+    const VOL_URL = `${BASE_URL}/vol/realized?symbol=${SYMBOL}`;
+    const volPromise = fetchJson(VOL_URL, cookie, 4000)
+      .catch(() => fetchJson(VOL_URL, cookie, 4000))
       .then(v => ({ v }))
       .catch(e => ({ err: e.message }));
 
@@ -104,7 +110,22 @@ exports.handler = async (event) => {
       : diff < -_ivBand ? 'NEGATIVE'
       : 'NEAR_FLIP';
 
-    const volRegime = classifyVolRegime(iv, rvIvRatio);
+    // Vol regime. When IV came from the smile fallback AND we have no rv/iv ratio
+    // either (full endpoint outage), the absolute smile IV is a different/lower
+    // tenor than the EXPANSION/CONTRACTION thresholds were calibrated for — it
+    // would mislabel the same market (endpoint EXPANSION → smile CONTRACTION) and
+    // wrongly hide the HIGH-VOL banner during a dump. Instead of trusting that,
+    // derive the regime from gamma position (spot vs flip), which needs no IV and
+    // maps to vol behavior: negative gamma → dealers amplify → expansion; positive
+    // → dampened → contraction (Dim/Eraker/Vilkov 2025, Garmash 2024). Safe in a
+    // dump: spot below flip → EXPANSION → HIGH-VOL banner shows. The rv/iv ratio,
+    // when present, IS tenor-independent, so keep trusting it over the gamma proxy.
+    let volRegime = classifyVolRegime(iv, rvIvRatio);
+    if (ivSource === 'smile' && rvIvRatio == null) {
+      volRegime = gammaRegime === 'NEGATIVE' ? 'EXPANSION'
+                : gammaRegime === 'POSITIVE' ? 'CONTRACTION'
+                : 'NEUTRAL';
+    }
     const weights   = getWeights(volRegime, gammaRegime);
     const levels    = scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip, iv,
                                   { rvIvRatio, hv5, hv63 });

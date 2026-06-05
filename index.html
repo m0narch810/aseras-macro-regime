@@ -1422,14 +1422,23 @@ function buildBiasLevels(levels, nqPrice) {
 
   // Short: nearest CALL WALL (net_gex > 0) above spot
   const shortCands = usable.filter(function(l) { return l.dist_nq > 0 && (l.net_gex || 0) > 0; });
-  // Long: nearest PUT WALL (net_gex < 0) below spot
-  const longCands  = usable.filter(function(l) { return l.dist_nq < 0 && (l.net_gex || 0) < 0; });
+  // Long: nearest PUT WALL (net_gex < 0) below spot. In negative gamma the server
+  // flags below-spot put walls watch_suppressed unless they're squeeze-grade —
+  // drop those so the panel doesn't suggest leaning long on acceleration rungs
+  // that get run over. If every put wall is suppressed, longLevel is genuinely
+  // null (no fallback) — "no watching level" is the correct answer in a dump.
+  const longRaw    = usable.filter(function(l) { return l.dist_nq < 0 && (l.net_gex || 0) < 0; });
+  const longCands  = longRaw.filter(function(l) { return !l.watch_suppressed; });
+  const longLevel  = nearest(longCands);
+  // True when there ARE put walls below spot but every one was suppressed (neg
+  // gamma, none squeeze-grade) — lets the panel explain the empty long side.
+  const longSuppressed = longLevel == null && longRaw.some(function(l) { return l.watch_suppressed; });
 
-  return { shortLevel: nearest(shortCands), longLevel: nearest(longCands) };
+  return { shortLevel: nearest(shortCands), longLevel: longLevel, longSuppressed: longSuppressed };
 }
 
 function renderBiasLevels(bias, qqqPrice) {
-  if (!bias || (!bias.shortLevel && !bias.longLevel)) return null;
+  if (!bias || (!bias.shortLevel && !bias.longLevel && !bias.longSuppressed)) return null;
   const box = el("div", {className: "lvl-alert"});
 
   function row(lbl, level, dirAbove) {
@@ -1512,6 +1521,10 @@ function renderBiasLevels(bias, qqqPrice) {
   if (bias.longLevel) {
     box.appendChild(row("Long at", bias.longLevel, false));
     box.appendChild(hint(bias.longLevel));
+  } else if (bias.longSuppressed) {
+    box.appendChild(el("div", {style:{
+      fontSize:"11px", color:"var(--bear)", padding:"4px 8px", fontStyle:"italic", opacity:"0.9",
+    }}, "No long — negative gamma (spot below flip). Put walls below are acceleration rungs, not support; none are squeeze-grade. Don't fade the move."));
   }
 
   return box;
@@ -1732,7 +1745,7 @@ function renderLevels(d) {
       fontSize:"9px", color:"var(--mixed)", padding:"3px 8px",
       background:"var(--card)", borderRadius:"3px", marginBottom:"6px",
       letterSpacing:"0.04em",
-    }}, "Vol endpoint down — IV/GTBR/regime running on 0DTE smile (* by IV). Smile reads lower tenor, so EXPANSION may under-flag."));
+    }}, "Vol endpoint down — IV/GTBR on 0DTE smile (* by IV). Vol regime derived from gamma position (spot vs flip), not IV."));
   } else if (d.vol_error) {
     app.appendChild(el("div", {style:{
       fontSize:"9px", color:"var(--bear)", padding:"3px 8px",

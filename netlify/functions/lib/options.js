@@ -6,6 +6,17 @@ const https = require('https');
 // ── CONSTANTS ────────────────────────────────────────────────────────────────
 const FILTER_PCT = 5.0;
 const MIN_SCORE  = 20.0;
+// When spot is below the gamma flip (negative gamma), put walls below spot are
+// acceleration rungs, not support — they get run over (2026-06-05: a -4.8% NQ
+// liquidation sliced every one, incl. a -0.51B wall, without a pause). Such a
+// wall is only worth WATCHING as a long/squeeze candidate if it's exceptionally
+// strong: a dominant wall whose mechanical hold reliability clears this bar
+// DESPITE the negative-gamma penalty baked into hold_prob's B_regime. Because B
+// ramps from ~0.5 at the flip down to 0.1 deep below it, clearing 0.55 is easy
+// near the flip and mechanically impossible deep in negative gamma — exactly the
+// "only a near-flip squeeze qualifies" behavior we want. Matches the dashboard's
+// existing green-hold cutoff.
+const SQUEEZE_HOLD_PROB = 0.55;
 
 const VALID_USERS        = ['aseras', 'awsame303', 'pinkus'];
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -634,12 +645,23 @@ function scoreLevels(strikes, weights, futuresPrice, volRegime, gammaFlip, iv, v
     ..._nmsWalls(scored.filter(l => l.net_gex <= 0), sep),
   ]);
 
+  // Negative-gamma put-wall suppression. Trigger is raw spot-below-flip (NOT the
+  // band-gated NEGATIVE regime) on purpose: on 2026-06-05 spot was 225pts below
+  // flip at the open but the vol-scaled band still read NEAR_FLIP, and those put
+  // walls all broke — the band makes the regime call late exactly when it matters.
+  const spotBelowFlip = gammaFlip != null && futuresPrice != null && futuresPrice < gammaFlip;
+
   return scored.map(l => {
     const is_dominant = dominantSet.has(l.strike_futures);
     const conviction  = is_dominant && l.hps_score >= 4 ? 'STANDALONE'
                       : is_dominant && l.hps_score === 3 ? 'CONFIRM'
                       : 'CONTEXT';
-    return { ...l, is_dominant, conviction };
+    // Suppress a below-spot put wall from watch/long suggestions in negative
+    // gamma unless it's a dominant, squeeze-grade wall (hold_prob ≥ SQUEEZE bar).
+    const isPutBelowSpot = (l.net_gex || 0) < 0 && l.strike_futures < futuresPrice;
+    const squeezeGrade   = is_dominant && (l.hold_prob || 0) >= SQUEEZE_HOLD_PROB;
+    const watch_suppressed = spotBelowFlip && isPutBelowSpot && !squeezeGrade;
+    return { ...l, is_dominant, conviction, watch_suppressed };
   });
 }
 
