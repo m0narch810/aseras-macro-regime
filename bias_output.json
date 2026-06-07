@@ -1,8 +1,8 @@
 {
   "meta": {
-    "generated_at": "2026-06-05 23:15",
-    "week_start": "2026-06-05",
-    "week_end": "2026-06-11",
+    "generated_at": "2026-06-07 18:09",
+    "week_start": "2026-06-12",
+    "week_end": "2026-06-18",
     "instrument": "NQ / ES Futures"
   },
   "confluence": "MIXED",
@@ -11,29 +11,29 @@
     "score": 0,
     "max_score": 11,
     "bullish_inputs": [
-      "net_liq_4w",
       "vix_wow",
       "vix_4w",
-      "us10y_wow"
+      "us10y_wow",
+      "vix_ratio_wow"
     ],
     "bearish_inputs": [
       "net_liq_wow",
-      "us10y_4w",
+      "dxy_4w",
       "yield_curve_wow",
       "yield_curve_4w"
     ],
     "factor_scores": {
       "net_liq_wow": -1,
-      "net_liq_4w": 1,
+      "net_liq_4w": 0,
       "vix_wow": 1,
       "vix_4w": 1,
       "dxy_wow": 0,
-      "dxy_4w": 0,
+      "dxy_4w": -1,
       "us10y_wow": 1,
-      "us10y_4w": -1,
+      "us10y_4w": 0,
       "yield_curve_wow": -1,
       "yield_curve_4w": -1,
-      "vix_ratio_wow": 0
+      "vix_ratio_wow": 1
     }
   },
   "price_model": {
@@ -41,7 +41,7 @@
     "probability": 0.49
   },
   "vol_forecast": {
-    "weekly_vol_pct": 1.3,
+    "weekly_vol_pct": 1.4,
     "percentile": 25,
     "label": "LOW VOL"
   },
@@ -60,22 +60,22 @@
   "macro_cluster": false,
   "macro_cluster_dir": null,
   "vix_term_structure": {
-    "vix_ratio": 0.814,
+    "vix_ratio": 0.986,
     "structure": "CONTANGO",
     "mood": "calm",
-    "vvix": 88.7,
-    "ratio_wow": 0.0,
-    "direction": "falling",
-    "bias": "bullish"
+    "vvix": 102.0,
+    "ratio_wow": 0.172,
+    "direction": "rising",
+    "bias": "bearish"
   },
   "key_levels": {
-    "4w_high": 30379.0,
-    "pw_high": 30379.0,
-    "pw_close": 30307.0,
-    "pw_mid": 29907.5,
-    "pw_low": 29436.0,
-    "4w_low": 27536.25,
-    "atr_5d": 395.65,
-    "atr_20d": 490.02
+    "4w_high": 30807.75,
+    "pw_high": 30807.75,
+    "pw_close": 30488.25,
+    "pw_mid": 30479.38,
+    "pw_low": 30151.0,
+    "4w_low": 28541.0,
+    "atr_5d": 1707.0,
+    "atr_20d": 555.74
   }
 }
