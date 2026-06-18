@@ -3,25 +3,26 @@ main = "src/worker.js"
 compatibility_date = "2024-11-01"
 
 # ── Cron triggers (UTC) ───────────────────────────────────────────────────────
-# 1) Dispatch the GEX snapshot workflow every 5 min, Mon-Fri, 07:00-21:59 UTC
+# 1) Dispatch the GEX snapshot workflow every 15 min, Mon-Fri, 07:00-21:59 UTC
 #    (full 03:00-17:00 ET envelope incl. pre-market, across EST+EDT). Widened from
 #    12-21 so this fully covers the window the GitHub native schedule used to —
 #    the native cron is now just an hourly fallback, so Cloudflare must own the
 #    whole session. The workflow ET-gates and no-ops outside 03:00-17:00 ET, so a
 #    stray dispatch is cheap. Cloudflare fires these reliably, unlike GitHub's
-#    own */5 schedule which silently drops most ticks (~5 runs/day → ~108/day).
+#    own schedule which silently drops most ticks. 15-min cadence yields ~56
+#    snapshots/day across the 14h ET session — all the resolution we need.
 # 2) Daily heartbeat at 22:15 UTC (~18:15 ET, after the close) — counts the day's
 #    snapshot commits and alerts if the pipeline went quiet (dead FF_SESSION,
 #    expired token, etc.) so breakage surfaces within a day, not weeks.
 [triggers]
-crons = ["*/5 7-21 * * 1-5", "15 22 * * 1-5"]
+crons = ["*/15 7-21 * * 1-5", "15 22 * * 1-5"]
 
 [vars]
 GITHUB_REPO      = "m0narch810/vanta"
 WORKFLOW_FILE    = "gex-snapshot.yml"
 WORKFLOW_REF     = "master"
 SNAPSHOT_BRANCH  = "gex-snapshots"
-HEARTBEAT_MIN    = "60"          # alert if fewer than this many snapshot commits land in a day
+HEARTBEAT_MIN    = "30"          # alert if fewer than this many snapshot commits land in a day (15-min cadence ≈ 56/day)
 # HEARTBEAT_WEBHOOK is set as a secret (optional) — Discord/Slack-style incoming webhook.
 
 # Secrets (set via `wrangler secret put`, NOT committed):
