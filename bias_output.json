@@ -1,81 +1,82 @@
 {
   "meta": {
-    "generated_at": "2026-06-22 17:26",
-    "week_start": "2026-06-19",
-    "week_end": "2026-06-25",
+    "generated_at": "2026-06-23 15:44",
+    "week_start": "2026-06-26",
+    "week_end": "2026-07-02",
     "instrument": "NQ / ES Futures"
   },
-  "confluence": "STRONG BEAR",
+  "confluence": "LEAN BULL",
   "macro_regime": {
-    "name": "RISK-OFF",
-    "score": -6,
+    "name": "LEAN RISK-ON",
+    "score": 1,
     "max_score": 11,
     "bullish_inputs": [
-      "net_liq_wow"
-    ],
-    "bearish_inputs": [
       "vix_wow",
       "vix_4w",
-      "dxy_wow",
-      "dxy_4w",
-      "yield_curve_wow",
-      "yield_curve_4w",
+      "us10y_wow",
+      "us10y_4w",
       "vix_ratio_wow"
     ],
+    "bearish_inputs": [
+      "net_liq_wow",
+      "net_liq_4w",
+      "yield_curve_wow",
+      "yield_curve_4w"
+    ],
     "factor_scores": {
-      "net_liq_wow": 1,
-      "net_liq_4w": 0,
-      "vix_wow": -1,
-      "vix_4w": -1,
-      "dxy_wow": -1,
-      "dxy_4w": -1,
-      "us10y_wow": 0,
-      "us10y_4w": 0,
+      "net_liq_wow": -1,
+      "net_liq_4w": -1,
+      "vix_wow": 1,
+      "vix_4w": 1,
+      "dxy_wow": 0,
+      "dxy_4w": 0,
+      "us10y_wow": 1,
+      "us10y_4w": 1,
       "yield_curve_wow": -1,
       "yield_curve_4w": -1,
-      "vix_ratio_wow": -1
+      "vix_ratio_wow": 1
     }
   },
   "price_model": {
-    "direction": "BULLISH",
-    "probability": 0.5
+    "direction": "BEARISH",
+    "probability": 0.49
   },
   "vol_forecast": {
-    "weekly_vol_pct": 1.8,
-    "percentile": 35,
+    "weekly_vol_pct": 1.4,
+    "percentile": 23,
     "label": "LOW VOL"
   },
   "cot": {
-    "as_of": "2026-06-09",
-    "nq_lev_pctile": 0.2308,
-    "nq_lev_wow": 0.0633,
-    "es_asset_mgr_net_pct": 0.4467,
+    "as_of": "2026-06-16",
+    "nq_lev_pctile": 0.4423,
+    "nq_lev_wow": 0.0179,
+    "es_asset_mgr_net_pct": 0.3814,
     "lev_label": "NEUTRAL",
     "positioning_interpretation": "NEUTRAL positioning",
     "cot_extreme": false,
     "cot_extreme_label": null
   },
-  "fed_stance": "DOVISH",
+  "fed_stance": "NEUTRAL",
   "trend_phase": "EARLY",
   "macro_cluster": false,
   "macro_cluster_dir": null,
   "vix_term_structure": {
-    "vix_ratio": 0.855,
+    "vix_ratio": 0.868,
     "structure": "CONTANGO",
     "mood": "calm",
-    "vvix": 90.4,
-    "ratio_wow": -0.087,
-    "direction": "falling",
-    "bias": "bullish"
+    "vvix": 91.7,
+    "ratio_wow": 0.013,
+    "direction": "rising",
+    "bias": "bearish"
   },
   "key_levels": {
     "4w_high": 30807.75,
-    "pw_high": 30422.0,
-    "pw_close": 29464.75,
-    "pw_mid": 29324.88,
-    "pw_low": 28227.75,
+    "pw_high": 30664.5,
+    "pw_close": 30263.35,
+    "pw_mid": 29947.25,
+    "pw_low": 29230.0,
     "4w_low": 28227.75,
-    "atr_5d": 687.8,
-    "atr_20d": 709.1
+    "atr_5d": 704.65,
+    "atr_20d": 722.28
   }
 }
