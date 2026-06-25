@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generated_at": "2026-06-24 15:30",
+    "generated_at": "2026-06-25 15:37",
     "week_start": "2026-06-26",
     "week_end": "2026-07-02",
     "instrument": "NQ / ES Futures"
@@ -61,11 +61,11 @@
   "macro_cluster": false,
   "macro_cluster_dir": null,
   "vix_term_structure": {
-    "vix_ratio": 0.923,
+    "vix_ratio": 0.927,
     "structure": "CONTANGO",
     "mood": "calm",
     "vvix": 95.6,
-    "ratio_wow": 0.068,
+    "ratio_wow": 0.072,
     "direction": "rising",
     "bias": "bearish"
   },
@@ -76,7 +76,7 @@
     "pw_mid": 29947.25,
     "pw_low": 29230.0,
     "4w_low": 28227.75,
-    "atr_5d": 914.33,
-    "atr_20d": 762.83
+    "atr_5d": 907.22,
+    "atr_20d": 779.48
   }
 }
