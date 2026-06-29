@@ -1,40 +1,38 @@
 {
   "meta": {
-    "generated_at": "2026-06-26 23:13",
-    "week_start": "2026-06-26",
-    "week_end": "2026-07-02",
+    "generated_at": "2026-06-29 16:34",
+    "week_start": "2026-07-03",
+    "week_end": "2026-07-09",
     "instrument": "NQ / ES Futures"
   },
-  "confluence": "LEAN BULL",
+  "confluence": "STRONG BEAR",
   "macro_regime": {
-    "name": "LEAN RISK-ON",
-    "score": 1,
+    "name": "RISK-OFF",
+    "score": -8,
     "max_score": 11,
-    "bullish_inputs": [
-      "vix_wow",
-      "vix_4w",
-      "us10y_wow",
-      "us10y_4w",
-      "vix_ratio_wow"
-    ],
+    "bullish_inputs": [],
     "bearish_inputs": [
       "net_liq_wow",
-      "net_liq_4w",
+      "vix_wow",
+      "vix_4w",
+      "dxy_wow",
+      "dxy_4w",
       "yield_curve_wow",
-      "yield_curve_4w"
+      "yield_curve_4w",
+      "vix_ratio_wow"
     ],
     "factor_scores": {
       "net_liq_wow": -1,
-      "net_liq_4w": -1,
-      "vix_wow": 1,
-      "vix_4w": 1,
-      "dxy_wow": 0,
-      "dxy_4w": 0,
-      "us10y_wow": 1,
-      "us10y_4w": 1,
+      "net_liq_4w": 0,
+      "vix_wow": -1,
+      "vix_4w": -1,
+      "dxy_wow": -1,
+      "dxy_4w": -1,
+      "us10y_wow": 0,
+      "us10y_4w": 0,
       "yield_curve_wow": -1,
       "yield_curve_4w": -1,
-      "vix_ratio_wow": 1
+      "vix_ratio_wow": -1
     }
   },
   "price_model": {
@@ -42,8 +40,8 @@
     "probability": 0.48
   },
   "vol_forecast": {
-    "weekly_vol_pct": 1.8,
-    "percentile": 34,
+    "weekly_vol_pct": 1.4,
+    "percentile": 23,
     "label": "LOW VOL"
   },
   "cot": {
@@ -58,25 +56,25 @@
   },
   "fed_stance": "NEUTRAL",
   "trend_phase": "EXHAUSTION",
-  "macro_cluster": false,
-  "macro_cluster_dir": null,
+  "macro_cluster": true,
+  "macro_cluster_dir": "BEAR",
   "vix_term_structure": {
-    "vix_ratio": 0.932,
+    "vix_ratio": 0.915,
     "structure": "CONTANGO",
     "mood": "calm",
-    "vvix": 94.5,
-    "ratio_wow": 0.078,
+    "vvix": 89.0,
+    "ratio_wow": 0.003,
     "direction": "rising",
     "bias": "bearish"
   },
   "key_levels": {
-    "4w_high": 30807.75,
-    "pw_high": 30664.5,
-    "pw_close": 30263.35,
-    "pw_mid": 29947.25,
-    "pw_low": 29230.0,
+    "4w_high": 30968.0,
+    "pw_high": 30968.0,
+    "pw_close": 29724.75,
+    "pw_mid": 30116.38,
+    "pw_low": 29264.75,
     "4w_low": 28227.75,
-    "atr_5d": 922.41,
-    "atr_20d": 802.81
+    "atr_5d": 732.25,
+    "atr_20d": 810.35
   }
 }
