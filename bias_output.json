@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generated_at": "2026-06-29 16:34",
+    "generated_at": "2026-06-30 15:23",
     "week_start": "2026-07-03",
     "week_end": "2026-07-09",
     "instrument": "NQ / ES Futures"
@@ -40,8 +40,8 @@
     "probability": 0.48
   },
   "vol_forecast": {
-    "weekly_vol_pct": 1.4,
-    "percentile": 23,
+    "weekly_vol_pct": 1.6,
+    "percentile": 27,
     "label": "LOW VOL"
   },
   "cot": {
@@ -59,13 +59,13 @@
   "macro_cluster": true,
   "macro_cluster_dir": "BEAR",
   "vix_term_structure": {
-    "vix_ratio": 0.915,
+    "vix_ratio": 0.896,
     "structure": "CONTANGO",
     "mood": "calm",
-    "vvix": 89.0,
-    "ratio_wow": 0.003,
-    "direction": "rising",
-    "bias": "bearish"
+    "vvix": 88.9,
+    "ratio_wow": -0.016,
+    "direction": "falling",
+    "bias": "bullish"
   },
   "key_levels": {
     "4w_high": 30968.0,
@@ -74,7 +74,7 @@
     "pw_mid": 30116.38,
     "pw_low": 29264.75,
     "4w_low": 28227.75,
-    "atr_5d": 732.25,
-    "atr_20d": 810.35
+    "atr_5d": 764.0,
+    "atr_20d": 834.16
   }
 }
