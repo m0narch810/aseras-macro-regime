@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generated_at": "2026-07-03 23:11",
+    "generated_at": "2026-07-06 16:13",
     "week_start": "2026-07-03",
     "week_end": "2026-07-09",
     "instrument": "NQ / ES Futures"
@@ -59,11 +59,11 @@
   "macro_cluster": true,
   "macro_cluster_dir": "BEAR",
   "vix_term_structure": {
-    "vix_ratio": 0.847,
+    "vix_ratio": 0.88,
     "structure": "CONTANGO",
     "mood": "calm",
     "vvix": 88.5,
-    "ratio_wow": -0.064,
+    "ratio_wow": -0.031,
     "direction": "falling",
     "bias": "bullish"
   },
