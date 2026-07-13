@@ -1,42 +1,45 @@
 {
   "meta": {
-    "generated_at": "2026-07-10 23:03",
-    "week_start": "2026-07-10",
-    "week_end": "2026-07-16",
+    "generated_at": "2026-07-13 15:39",
+    "week_start": "2026-07-17",
+    "week_end": "2026-07-23",
     "instrument": "NQ / ES Futures"
   },
-  "confluence": "MIXED",
+  "confluence": "STRONG BULL",
   "macro_regime": {
-    "name": "TRANSITION",
-    "score": 0,
+    "name": "RISK-ON",
+    "score": 3,
     "max_score": 11,
     "bullish_inputs": [
       "net_liq_wow",
+      "net_liq_4w",
       "vix_wow",
+      "vix_4w",
+      "yield_curve_wow",
       "vix_ratio_wow"
     ],
     "bearish_inputs": [
-      "vix_4w",
       "dxy_4w",
+      "us10y_wow",
       "yield_curve_4w"
     ],
     "factor_scores": {
       "net_liq_wow": 1,
-      "net_liq_4w": 0,
+      "net_liq_4w": 1,
       "vix_wow": 1,
-      "vix_4w": -1,
+      "vix_4w": 1,
       "dxy_wow": 0,
       "dxy_4w": -1,
-      "us10y_wow": 0,
+      "us10y_wow": -1,
       "us10y_4w": 0,
-      "yield_curve_wow": 0,
+      "yield_curve_wow": 1,
       "yield_curve_4w": -1,
       "vix_ratio_wow": 1
     }
   },
   "price_model": {
     "direction": "BEARISH",
-    "probability": 0.49
+    "probability": 0.48
   },
   "vol_forecast": {
     "weekly_vol_pct": 1.4,
@@ -58,22 +61,22 @@
   "macro_cluster": false,
   "macro_cluster_dir": null,
   "vix_term_structure": {
-    "vix_ratio": 0.832,
+    "vix_ratio": 0.809,
     "structure": "CONTANGO",
     "mood": "calm",
-    "vvix": 88.8,
-    "ratio_wow": -0.049,
+    "vvix": 87.3,
+    "ratio_wow": -0.036,
     "direction": "falling",
     "bias": "bullish"
   },
   "key_levels": {
     "4w_high": 30968.0,
-    "pw_high": 30599.75,
-    "pw_close": 29556.0,
-    "pw_mid": 29880.12,
-    "pw_low": 29160.5,
-    "4w_low": 28227.75,
-    "atr_5d": 637.31,
-    "atr_20d": 776.36
+    "pw_high": 30094.0,
+    "pw_close": 29937.0,
+    "pw_mid": 29501.88,
+    "pw_low": 28909.75,
+    "4w_low": 28909.75,
+    "atr_5d": 402.75,
+    "atr_20d": 754.45
   }
 }
