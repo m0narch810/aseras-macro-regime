@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generated_at": "2026-07-14 14:42",
+    "generated_at": "2026-07-15 14:42",
     "week_start": "2026-07-17",
     "week_end": "2026-07-23",
     "instrument": "NQ / ES Futures"
@@ -64,7 +64,7 @@
     "vix_ratio": 0.867,
     "structure": "CONTANGO",
     "mood": "calm",
-    "vvix": 91.3,
+    "vvix": 92.0,
     "ratio_wow": 0.021,
     "direction": "rising",
     "bias": "bearish"
@@ -76,7 +76,7 @@
     "pw_mid": 29501.88,
     "pw_low": 28909.75,
     "4w_low": 28909.75,
-    "atr_5d": 528.62,
-    "atr_20d": 723.25
+    "atr_5d": 558.5,
+    "atr_20d": 727.66
   }
 }
