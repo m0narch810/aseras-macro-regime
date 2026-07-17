@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generated_at": "2026-07-17 14:25",
+    "generated_at": "2026-07-17 22:54",
     "week_start": "2026-07-17",
     "week_end": "2026-07-23",
     "instrument": "NQ / ES Futures"
@@ -38,8 +38,8 @@
     }
   },
   "price_model": {
-    "direction": "BEARISH",
-    "probability": 0.49
+    "direction": "BULLISH",
+    "probability": 0.51
   },
   "vol_forecast": {
     "weekly_vol_pct": 1.7,
@@ -47,12 +47,12 @@
     "label": "LOW VOL"
   },
   "cot": {
-    "as_of": "2026-07-07",
-    "nq_lev_pctile": 0.0128,
-    "nq_lev_wow": 0.0477,
-    "es_asset_mgr_net_pct": 0.4928,
+    "as_of": "2026-07-14",
+    "nq_lev_pctile": 0.0,
+    "nq_lev_wow": -0.0321,
+    "es_asset_mgr_net_pct": 0.4844,
     "lev_label": "EXTREME SHORT",
-    "positioning_interpretation": "EXTREME SHORT \u2014 covering, potential squeeze underway",
+    "positioning_interpretation": "EXTREME SHORT \u2014 adding shorts, squeeze risk elevated",
     "cot_extreme": true,
     "cot_extreme_label": "FUMES_SHORT"
   },
@@ -65,9 +65,9 @@
     "structure": "CONTANGO",
     "mood": "calm",
     "vvix": 93.0,
-    "ratio_wow": 0.028,
-    "direction": "rising",
-    "bias": "bearish"
+    "ratio_wow": 0.0,
+    "direction": "falling",
+    "bias": "bullish"
   },
   "key_levels": {
     "4w_high": 30968.0,
