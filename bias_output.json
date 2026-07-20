@@ -1,40 +1,37 @@
 {
   "meta": {
-    "generated_at": "2026-07-17 22:54",
-    "week_start": "2026-07-17",
-    "week_end": "2026-07-23",
+    "generated_at": "2026-07-20 15:02",
+    "week_start": "2026-07-24",
+    "week_end": "2026-07-30",
     "instrument": "NQ / ES Futures"
   },
-  "confluence": "STRONG BULL",
+  "confluence": "LEAN BULL",
   "macro_regime": {
-    "name": "RISK-ON",
-    "score": 3,
+    "name": "LEAN RISK-ON",
+    "score": 2,
     "max_score": 11,
     "bullish_inputs": [
       "net_liq_wow",
       "net_liq_4w",
-      "vix_wow",
       "vix_4w",
-      "yield_curve_wow",
-      "vix_ratio_wow"
+      "yield_curve_wow"
     ],
     "bearish_inputs": [
       "dxy_4w",
-      "us10y_wow",
-      "yield_curve_4w"
+      "us10y_4w"
     ],
     "factor_scores": {
       "net_liq_wow": 1,
       "net_liq_4w": 1,
-      "vix_wow": 1,
+      "vix_wow": 0,
       "vix_4w": 1,
       "dxy_wow": 0,
       "dxy_4w": -1,
-      "us10y_wow": -1,
-      "us10y_4w": 0,
+      "us10y_wow": 0,
+      "us10y_4w": -1,
       "yield_curve_wow": 1,
-      "yield_curve_4w": -1,
-      "vix_ratio_wow": 1
+      "yield_curve_4w": 0,
+      "vix_ratio_wow": 0
     }
   },
   "price_model": {
@@ -42,8 +39,8 @@
     "probability": 0.51
   },
   "vol_forecast": {
-    "weekly_vol_pct": 1.7,
-    "percentile": 32,
+    "weekly_vol_pct": 1.4,
+    "percentile": 21,
     "label": "LOW VOL"
   },
   "cot": {
@@ -61,22 +58,22 @@
   "macro_cluster": false,
   "macro_cluster_dir": null,
   "vix_term_structure": {
-    "vix_ratio": 0.873,
+    "vix_ratio": 0.914,
     "structure": "CONTANGO",
     "mood": "calm",
-    "vvix": 93.0,
-    "ratio_wow": 0.0,
-    "direction": "falling",
-    "bias": "bullish"
+    "vvix": 104.9,
+    "ratio_wow": 0.068,
+    "direction": "rising",
+    "bias": "bearish"
   },
   "key_levels": {
     "4w_high": 30968.0,
-    "pw_high": 30094.0,
-    "pw_close": 29937.0,
-    "pw_mid": 29501.88,
-    "pw_low": 28909.75,
+    "pw_high": 30077.75,
+    "pw_close": 29225.75,
+    "pw_mid": 29578.12,
+    "pw_low": 29078.5,
     "4w_low": 28909.75,
-    "atr_5d": 611.9,
-    "atr_20d": 713.95
+    "atr_5d": 817.5,
+    "atr_20d": 722.2
   }
 }
