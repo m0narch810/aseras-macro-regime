@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generated_at": "2026-08-18 13:35",
+    "generated_at": "2026-08-20 13:39",
     "week_start": "2026-07-31",
     "week_end": "2026-08-06",
     "instrument": "NQ / ES Futures"
@@ -42,7 +42,7 @@
   },
   "vol_forecast": {
     "weekly_vol_pct": 1.7,
-    "percentile": 27,
+    "percentile": 25,
     "label": "LOW VOL"
   },
   "cot": {
