@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generated_at": "2026-09-04 16:40",
+    "generated_at": "2026-09-04 23:51",
     "week_start": "2026-07-31",
     "week_end": "2026-08-06",
     "instrument": "NQ / ES Futures"
@@ -46,17 +46,17 @@
     "label": "LOW VOL"
   },
   "cot": {
-    "as_of": "2026-08-25",
-    "nq_lev_pctile": 0.4359,
-    "nq_lev_wow": 0.068,
-    "es_asset_mgr_net_pct": 0.466,
-    "lev_label": "NEUTRAL",
-    "positioning_interpretation": "NEUTRAL positioning",
-    "cot_extreme": false,
-    "cot_extreme_label": null
+    "as_of": "2026-09-01",
+    "nq_lev_pctile": 0.8141,
+    "nq_lev_wow": 0.0904,
+    "es_asset_mgr_net_pct": 0.4564,
+    "lev_label": "EXTREME LONG",
+    "positioning_interpretation": "EXTREME LONG \u2014 adding longs, reversal risk elevated",
+    "cot_extreme": true,
+    "cot_extreme_label": "FUMES_LONG"
   },
   "fed_stance": "NEUTRAL",
-  "trend_phase": "EARLY",
+  "trend_phase": "EXHAUSTION",
   "macro_cluster": false,
   "macro_cluster_dir": null,
   "vix_term_structure": {
